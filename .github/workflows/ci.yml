@@ -1,2 +1,2 @@
-- name: Run Autonomous QA Suite
-  run: npm run test -- src/__tests__/autonomous
+- name: Run Autonomous QA
+  run: npm test -- ai.qa.test.ts

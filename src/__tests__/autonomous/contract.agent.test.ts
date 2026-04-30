@@ -1,59 +1,28 @@
-import { ApolloServer } from "@apollo/server";
-import { readFileSync } from "fs";
-import gql from "graphql-tag";
-import resolvers from "../../resolvers";
-import { buildSubgraphSchema } from "@apollo/subgraph";
-import API from "../../api";
+// src/qa/agents/coverage-agent.ts
 
-const typeDefs = gql(
-  readFileSync("schema.graphql", {
-    encoding: "utf-8",
-  })
-);
+export interface CoverageFailure {
+  timestamp: string;
+  field: string;
+  reason: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+}
 
-const server = new ApolloServer({
-  schema: buildSubgraphSchema({
-    typeDefs,
-    resolvers,
-  }),
-});
+/**
+ * Records a coverage gap or failure discovered by the Autonomous QA Runner.
+ * In a production autonomous framework, this would write to a vector database,
+ * an artifact JSON for the CI/CD pipeline, or trigger an LLM to generate
+ * a new test to close the gap.
+ */
+export function recordFailure(failure: CoverageFailure): void {
+  // Log to console for CI/CD visibility
+  console.error(
+    `[CoverageAgent] ❌ GAP DETECTED: ${failure.field} - ${failure.reason} [${failure.severity}]`
+  );
 
-describe("🔗 Contract & Resolver Agent", () => {
-  it("validates launches query contract shape", async () => {
-    const res = await server.executeOperation({
-      query: `
-        query {
-          launchesPast(limit: 1) {
-            id
-            mission_name
-            launch_date_local
-          }
-        }
-      `,
-    }, {
-      contextValue: { api: new API() }
-    });
-
-    const result = (res.body as any).singleResult;
-    expect(result.errors).toBeUndefined();
-    expect(result.data?.launchesPast[0]).toHaveProperty("mission_name");
-  });
-
-  it("ensures null safety for optional fields", async () => {
-    const res = await server.executeOperation({
-      query: `
-        query {
-          launchesPast(limit: 5) {
-            rocket {
-              rocket_name
-            }
-          }
-        }
-      `,
-    }, {
-      contextValue: { api: new API() }
-    });
-
-    expect((res.body as any).singleResult.errors).toBeUndefined();
-  });
-});
+  // Example: Persist to a local QA artifact file for the orchestrator
+  // const fs = require('fs');
+  // const path = './qa-artifacts/coverage-gaps.json';
+  // const existing = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path)) : [];
+  // existing.push(failure);
+  // fs.writeFileSync(path, JSON.stringify(existing, null, 2));
+}

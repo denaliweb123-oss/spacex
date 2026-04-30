@@ -12,7 +12,7 @@ const resolvers: Resolvers = {
       { find, offset, order, sort, limit },
       context
     ) => {
-      const data = await context.api.queryHistoryEvent(find);
+      const data = await context.api.queryHistoryEvent(find ?? {});
       if (data) return { data, result: { totalCount: data.length } };
       else return { result: { totalCount: 0 } };
     },

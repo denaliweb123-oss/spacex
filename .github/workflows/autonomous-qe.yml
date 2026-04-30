@@ -63,9 +63,9 @@ jobs:
       - name: Check schema parses cleanly
         run: |
           node -e "
-            const { buildSchema } = require('graphql');
+            const { parse, buildASTSchema } = require('graphql');
             const { readFileSync } = require('fs');
-            buildSchema(readFileSync('schema.graphql', 'utf-8'));
+            buildASTSchema(parse(readFileSync('schema.graphql', 'utf-8')));
             console.log('Schema parsed successfully');
           "
 
@@ -219,10 +219,10 @@ jobs:
       - name: Run field-level access control audit
         run: |
           node -e "
-            const { buildSchema, isObjectType, isNonNullType, GraphQLString, GraphQLID } = require('graphql');
+            const { parse, buildASTSchema, isObjectType, isNonNullType, GraphQLString, GraphQLID } = require('graphql');
             const { readFileSync } = require('fs');
 
-            const schema = buildSchema(readFileSync('schema.graphql', 'utf-8'));
+            const schema = buildASTSchema(parse(readFileSync('schema.graphql', 'utf-8')));
             const SENSITIVE_TYPES = new Set(['ID', 'String', 'uuid', 'timestamptz']);
             const HAS_AUTH = /@auth|@authenticated|@requiresScopes/;
 

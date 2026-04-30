@@ -1,28 +1,24 @@
 export const applyLimitOffset = ({
   data,
-  limit = data.length,
-  offset = 0,
+  limit,
+  offset,
 }: {
-  data: Array<any>;
-  limit?: number;
-  offset?: number;
+  data: any[];
+  limit?: number | null;
+  offset?: number | null;
 }) => {
-  if (!Array.isArray(data)) {
-    throw new Error("Data must be an array");
-  }
+  const finalLimit = limit ?? data.length;
+  const finalOffset = offset ?? 0;
 
-  if (typeof limit !== "undefined" && (!Number.isInteger(limit) || limit < 0)) {
+  if (!Number.isInteger(finalLimit) || finalLimit < 0) {
     throw new Error("Limit must be a non-negative integer");
   }
 
-  if (
-    typeof offset !== "undefined" &&
-    (!Number.isInteger(offset) || offset < 0)
-  ) {
+  if (!Number.isInteger(finalOffset) || finalOffset < 0) {
     throw new Error("Offset must be a non-negative integer");
   }
 
-  const endIndex = limit + offset;
+  const endIndex = finalLimit + finalOffset;
 
-  return data.slice(offset, endIndex);
+  return data.slice(finalOffset, endIndex);
 };

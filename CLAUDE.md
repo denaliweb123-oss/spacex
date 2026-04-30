@@ -56,22 +56,36 @@ Each request receives a `DataSourceContext` (defined in [src/types/DataSourceCon
 
 ### Security Modules
 
-`src/index.ts` imports `./graphql/security/validationRules` and `./graphql/security/errorFormatter` — these modules handle query depth/complexity limits and error sanitization. They must exist for the server to build.
+[src/graphql/security/validationRules.ts](src/graphql/security/validationRules.ts) and [src/graphql/security/errorFormatter.ts](src/graphql/security/errorFormatter.ts) handle query depth/complexity limits and error sanitization. Both are imported by `src/index.ts` and must exist for the server to build.
+
+### Autonomous QA System
+
+[src/qa/runner.ts](src/qa/runner.ts) — orchestrates a full autonomous QA cycle: generates queries from the live schema, fuzzes them, executes each against an in-memory server, and detects anomalies. Called by `src/__tests__/autonomous/ai.qa.test.ts`.
+
+- [src/qa/generators/query-generator.ts](src/qa/generators/query-generator.ts) — derives valid GraphQL queries from schema introspection.
+- [src/qa/agents/fuzz-agent.ts](src/qa/agents/fuzz-agent.ts) — produces malformed/edge-case variants of a query.
+- [src/qa/agents/anomaly-agent.ts](src/qa/agents/anomaly-agent.ts) — flags responses that exceed 1500 ms or contain errors.
+- [src/qa/agents/coverage-agent.ts](src/qa/agents/coverage-agent.ts) — records failures for CI artifact upload.
+- [src/qa/memory/qa-memory.json](src/qa/memory/qa-memory.json) — persists QA state between runs.
 
 ## Testing
 
-Tests use Jest with `ts-jest`. All test files live under `src/__tests__/`.
+Tests use Jest with `ts-jest`. All test files live under `src/__tests__/`. Jest `roots` is set to `src`, so files outside that directory are not picked up.
 
-- **[src/__tests__/repo.test.ts](src/__tests__/repo.test.ts)** — Integration tests using `server.executeOperation()` against an in-memory Apollo Server instance (no network calls).
-- **[src/__tests__/autonomous/](src/__tests__/autonomous/)** — AI-driven autonomous tests covering contract, security, schema integrity, performance, and service logic.
+- **[src/__tests__/repo.test.ts](src/__tests__/repo.test.ts)** — Integration tests via `server.executeOperation()` against an in-memory Apollo Server (no network calls).
+- **[src/__tests__/autonomous/](src/__tests__/autonomous/)** — AI-driven tests: `contract.agent.test.ts`, `security.agent.test.ts`, `schema.intelligence.test.ts`, `performance.agent.test.ts`, `service.agent.test.ts`, `ai.qa.test.ts` (runs the full autonomous QA cycle via `src/qa/runner.ts`).
 
-Note: some `.test.ts` files are currently located in `.github/workflows/` — these belong in `src/__tests__/` and should be moved before they are executed by Jest (Jest roots are configured to `src` only).
+**Misplaced test files:** the following live in `.github/workflows/` and are not executed by Jest; they belong in `src/__tests__/`: `api.test.ts`, `depth-limit.test.ts`, `errors.test.ts`, `launches.test.ts`, `limit-offset-service.test.ts`, `parse-service.test.ts`, `security.test.ts`, `snapshot.test.ts`.
+
+## Test Strategy
+
+[docs/test-strategy.md](docs/test-strategy.md) documents the full QA approach across eight dimensions (schema/contract, functional, security, performance, caching, observability, CI/CD, resilience). Consult it before adding or restructuring test suites.
 
 ## CI/CD
 
-- **[.github/workflows/ci.yml](.github/workflows/ci.yml)** — Runs on every push: `npm install` → `npm test` → Apollo Rover schema check against Apollo Studio (requires `APOLLO_KEY` and `APOLLO_GRAPH_REF` secrets).
-- **[.github/workflows/publish-schema.yaml](.github/workflows/publish-schema.yaml)** — Publishes schema to Apollo Studio on push to `main` (also requires `PRODUCTION_URL`).
-- **[.github/workflows/autonomous-qe.yml](.github/workflows/autonomous-qe.yml)** — Runs autonomous QE test suites.
+- **[.github/workflows/ci.yml](.github/workflows/ci.yml)** — Runs on every push: `npm install` → `npm test` → Apollo Rover schema check (requires `APOLLO_KEY` and `APOLLO_GRAPH_REF`).
+- **[.github/workflows/publish-schema.yaml](.github/workflows/publish-schema.yaml)** — Publishes schema to Apollo Studio on push to `main` (requires `PRODUCTION_URL`).
+- **[.github/workflows/autonomous-qe.yml](.github/workflows/autonomous-qe.yml)** — Full autonomous QE pipeline on every push: schema diff against production (graphql-inspector), schema lint, contract tests, N+1 detection gate (PRs only), null-handling suite, autonomous QA suite (`src/__tests__/autonomous/`), failure-report artifact upload (main only), and a weekly Monday auth audit cron.
 
 ## Environment Variables
 

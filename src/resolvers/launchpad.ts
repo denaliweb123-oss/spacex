@@ -5,7 +5,7 @@ import { Resolvers } from "../__generated__/resolvers-types";
 const resolvers: Resolvers = {
   Query: {
     launchpads: async (obj, { limit, offset }, context) => {
-      const data = await context.api.getLandpads();
+      const data = await context.api.getLaunchPads();
       return applyLimitOffset({ data, limit, offset });
     },
     launchpad: async (obj, { id }, context) => {
@@ -15,11 +15,14 @@ const resolvers: Resolvers = {
   },
   Launchpad: {
     vehicles_launched: async ({ vehicles_launched }, args, context) => {
-      return vehicles_launched.map(async (name) => {
-        const rocketResult = await context.api.queryRocket({name});
-        if(rocketResult.result.totalCount == 0) return undefined;
-        return rocketResult.data[0];
-      })
+      if (!vehicles_launched) return null;
+      return Promise.all(
+        vehicles_launched.map(async (name) => {
+          const rocketResult = await context.api.queryRocket({ name });
+          if (rocketResult?.result?.totalCount === 0) return null;
+          return rocketResult?.data?.[0] ?? null;
+        })
+      );
     },
   },
 };
