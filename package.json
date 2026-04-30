@@ -29,7 +29,10 @@
     "@apollo/server": "^4.10.2",
     "@apollo/server-plugin-response-cache": "^4.1.3",
     "@apollo/subgraph": "^2.7.2",
+    "graphql-depth-limit": "^1.1.0",
+    "graphql-rate-limit": "^3.3.0",
     "graphql-tag": "latest",
+    "graphql-validation-complexity": "^0.4.2",
     "lodash": "^4.17.21",
     "node-fetch": "^2.6.8"
   },
@@ -37,6 +40,8 @@
     "@graphql-codegen/cli": "^2.6.2",
     "@graphql-codegen/typescript": "^2.4.11",
     "@graphql-codegen/typescript-resolvers": "^2.6.4",
+    "@types/graphql-depth-limit": "^1.1.6",
+    "@types/graphql-validation-complexity": "^0.4.4",
     "@types/jest": "^29.5.14",
     "@types/lodash": "^4.14.191",
     "@types/node": "^18.7.23",
@@ -51,12 +56,12 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "testRegex": "/__tests__/.+\\.test\\.ts$",
     "roots": [
       "src"
     ],
     "globals": {
       "ts-jest": {
-        "testRegext": "/__tests__/.*.test.ts",
         "verbose": true
       }
     }
