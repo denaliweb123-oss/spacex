@@ -59,7 +59,6 @@ describe("Response Shape Snapshots", () => {
     expect(launch.rocket.rocket_name).toBe("Falcon 1");
     expect(launch.rocket.rocket_type).toBe("Merlin A");
 
-    // Snapshot catches unintended shape changes in future refactors
     expect(result.data).toMatchSnapshot();
   });
 });

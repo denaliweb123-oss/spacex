@@ -1,22 +1,48 @@
-import API from '../api';
+import API from "../api";
 
-describe('API Service Unit Tests', () => {
+jest.mock("node-fetch");
+const fetch = require("node-fetch");
+
+describe("API", () => {
   let api: API;
 
   beforeEach(() => {
     api = new API();
+    fetch.mockReset();
   });
 
-  it('defines all required resource methods', () => {
-    expect(api.getCapsules).toBeDefined();
-    expect(api.getShips).toBeDefined();
-    expect(api.getLaunches).toBeDefined();
-    expect(api.getRockets).toBeDefined();
+  it("constructs with the correct base URL", () => {
+    expect(api.baseUrl).toBe("https://api.spacexdata.com");
   });
 
-  it('implements getLaunch with an ID argument', () => {
-    const spy = jest.spyOn(api as any, 'get').mockResolvedValue({});
-    api.getLaunch('101');
-    expect(spy).toHaveBeenCalledWith('launches/101', 5);
+  it("getLaunches calls the launches endpoint", async () => {
+    const payload = [{ id: "launch1" }];
+    fetch.mockResolvedValue({ json: async () => payload } as any);
+    const result = await api.getLaunches();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/v4/launches")
+    );
+    expect(result).toEqual(payload);
+  });
+
+  it("getLaunch calls the correct launch endpoint with id", async () => {
+    const payload = { id: "abc123" };
+    fetch.mockResolvedValue({ json: async () => payload } as any);
+    const result = await api.getLaunch("abc123");
+    // getLaunch uses version 5
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/v5/launches/abc123")
+    );
+    expect(result).toEqual(payload);
+  });
+
+  it("getRocket calls the correct rocket endpoint with id", async () => {
+    const payload = { id: "falcon9", name: "Falcon 9" };
+    fetch.mockResolvedValue({ json: async () => payload } as any);
+    const result = await api.getRocket("falcon9");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/v4/rockets/falcon9")
+    );
+    expect(result).toEqual(payload);
   });
 });
