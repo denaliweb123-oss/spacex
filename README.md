@@ -23,7 +23,7 @@ This graph is meant for exploring historical SpaceX data. Any current space laun
 
 ## Accessing this graph
 
-🛰 You can send operations to this graph through its cloud router: https://current--spacex-pxxbxen.apollographos.net/graphql
+🛰 You can send operations to this graph through its cloud router: https://main--spacex-pxxbxen.apollographos.net/graphql
 
 ## 🧪 Quality Engineering & Autonomous Testing
 
