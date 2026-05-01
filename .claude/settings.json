@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node scripts/strip-federation.js schema.graphql /tmp/schema_test_stripped.graphql)",
+      "Read(//tmp/**)",
+      "Bash(npx @graphql-inspector/cli diff /tmp/schema_test_stripped.graphql /tmp/schema_test_stripped.graphql)"
+    ]
+  }
+}

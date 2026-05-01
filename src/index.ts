@@ -4,18 +4,21 @@ import {
   startStandaloneServer,
 } from "@apollo/server/standalone";
 import { createProductionApolloServer } from "./graphql/server";
-
-const port = process.env.PORT ?? "4001";
-const subgraphName = require("../package.json").name;
 import { DataSourceContext } from "./types/DataSourceContext";
 import API from "./api";
+import { SpaceXService } from "./services/SpaceXService";
+
+const port = process.env.PORT ?? "4001";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const subgraphName: string = require("../package.json").name;
 
 const context: ContextFunction<
   [StandaloneServerContextFunctionArgument],
   DataSourceContext
-> = async ({ req }) => ({
-  api: new API(),
-});
+> = async () => {
+  const api = new API();
+  return { api, spacexService: new SpaceXService(api) };
+};
 
 async function main() {
   const server = createProductionApolloServer();

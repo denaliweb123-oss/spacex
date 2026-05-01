@@ -8,7 +8,7 @@ async function updateReadmeMetrics() {
   const metrics = JSON.parse(metricsContent);
   console.log('Metrics collected:', metrics);
   
-  let readmeContent = readFileSync('README.md', 'utf-8');
+  const readmeContent = readFileSync('README.md', 'utf-8');
 
   const lastRun = metrics.lastRun
     ? new Date(metrics.lastRun).toUTCString()
