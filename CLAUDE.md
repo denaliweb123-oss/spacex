@@ -73,6 +73,7 @@ Each request receives a `DataSourceContext` (defined in [src/types/DataSourceCon
 Tests use Jest with `ts-jest`. All test files live under `src/__tests__/`. Jest `roots` is set to `src`, so files outside that directory are not picked up.
 
 - **src/__tests__/repo.test.ts**, **src/__tests__/launches.integration.test.ts**, **src/__tests__/snapshot.test.ts** — Integration tests via `server.executeOperation()` against an in-memory Apollo Server.
+git push
 - **Unit tests:** `api.test.ts`, `limit-offset-service.test.ts`, `parse-service.test.ts`, `errors.test.ts`.
 - **[src/__tests__/autonomous/](src/__tests__/autonomous/)** — AI-driven tests: `contract.agent.test.ts`, `security.agent.test.ts`, `schema.intelligence.test.ts`, `performance.agent.test.ts`, `service.agent.test.ts`, `ai.qa.test.ts` (runs the full autonomous QA cycle via `src/qa/runner.ts`).
 

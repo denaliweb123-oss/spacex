@@ -60,9 +60,13 @@ jobs:
 
       - name: Lint schema
         run: |
+          # graphql-schema-linter calls buildASTSchema() which rejects the federation
+          # @link directive (not a standard GraphQL directive). Strip it before linting;
+          # it is on a single line so grep -v is safe.
+          grep -v '@link' schema.graphql > /tmp/schema-for-lint.graphql
           npx graphql-schema-linter \
             --rules fields-have-descriptions,types-have-descriptions,deprecations-have-a-reason \
-            schema.graphql # Removed `|| true` to make this a hard gate
+            /tmp/schema-for-lint.graphql
 
       - name: Check schema parses cleanly
         run: |
