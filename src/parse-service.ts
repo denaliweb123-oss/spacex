@@ -20,13 +20,13 @@ export const parseMissions = (mission: any) => ({
   name: mission.mission_name
 });
 
-export const parsePayloadObj = (payload: any) => ({ ...payload, id: payload.payload_id });
+export const parsePayloadObj = (payload: any) => ({ ...payload, id: payload.id || payload.payload_id });
 
 export const parsePayloads = (data: any, query: any) => {
   const payloads: Array<any> = [];
   let match: number;
   data.forEach((launch: Launch) => {
-    launch.rocket.second_stage.payloads.forEach(payloadObj => {
+    launch.rocket?.second_stage?.payloads?.forEach(payloadObj => {
       let payload = parsePayloadObj(payloadObj);
       match = 0;
       if (Object.keys(query).length !== 0) {

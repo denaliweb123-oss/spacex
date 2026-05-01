@@ -1,0 +1,2 @@
+- name: Run Autonomous QA
+  run: npm test -- ai.qa.test.ts

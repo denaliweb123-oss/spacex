@@ -13,7 +13,7 @@ const resolvers: Resolvers = {
   },
   Capsule: {
     dragon: async (parent, args, context) => {
-      return undefined;
+      return null;
     },
   },
 };

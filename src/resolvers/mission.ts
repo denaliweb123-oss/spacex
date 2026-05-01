@@ -9,7 +9,7 @@ const resolvers: Resolvers = {
       return { result: { totalCount: 0 } };
     },
     mission: async (obj, { id }, context) => {
-      return undefined;
+      return null;
     },
   },
 };

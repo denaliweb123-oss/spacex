@@ -7,6 +7,8 @@ import {
 } from "@apollo/server/standalone";
 import responseCachePlugin from "@apollo/server-plugin-response-cache";
 import { ApolloServerPluginCacheControl } from "@apollo/server/plugin/cacheControl";
+import { validationRules } from "./graphql/security/validationRules";
+import { formatError } from "./graphql/security/errorFormatter";
 
 const port = process.env.PORT ?? "4001";
 import resolvers from "./resolvers";
@@ -24,15 +26,18 @@ const context: ContextFunction<
 });
 
 async function main() {
-  let typeDefs = gql(
-    readFileSync("schema.graphql", {
-      encoding: "utf-8",
-    })
-  );
+  const typeDefs = gql(
+  readFileSync("schema.graphql", {
+    encoding: "utf-8",
+  })
+);
+
   const server = new ApolloServer({
-    schema: buildSubgraphSchema({ typeDefs, resolvers }),
-    introspection: true,
-    plugins: [
+  schema: buildSubgraphSchema({ typeDefs, resolvers }),
+  validationRules,
+  formatError,
+  introspection: process.env.NODE_ENV !== "production",
+  plugins: [
       ApolloServerPluginCacheControl({ defaultMaxAge: 86400 }),
       responseCachePlugin({
         shouldWriteToCache: async (requestContext) => {
@@ -45,8 +50,10 @@ async function main() {
             console.log(
               `Hash: ${requestContext.queryHash}\n\tAge: ${
                 requestContext.overallCachePolicy.maxAge
-              }\n\tOperation: ${
-                requestContext.source.replaceAll("\n","").replaceAll("\t","")
+            }\n\tOperation: ${
+              (requestContext.source ?? "")
+                .replace(/\n/g, "")
+                .replace(/\t/g, "")
               }\n\tVariables: ${JSON.stringify(
                 requestContext.request.variables
               )}`

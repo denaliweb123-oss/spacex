@@ -26,7 +26,7 @@ const resolvers: Resolvers = {
       { find, offset, order, sort, limit },
       context
     ): Promise<LaunchesPastResult> => {
-      const data = await context.api.queryNextLaunch(find);
+      const data = await context.api.queryNextLaunch(find ?? {});
       if (data) return { data, result: { totalCount: data.length } };
       else return { result: { totalCount: 0 } };
     },
@@ -55,34 +55,35 @@ const resolvers: Resolvers = {
   },
   Launch: {
     ships: async (parent, args, context) => {
-      return parent.ships.map(async (ship: any) => {
+      if (!parent.ships) return null;
+      return Promise.all(parent.ships.map(async (ship: any) => {
         const result = await context.api.getShip(ship.ship_id);
         return parseShip(result);
-      });
+      }));
     },
     rocket: async (parent, args, context) => {
-      const id = parent as string;
       if (typeof parent.rocket === "string") {
         const rocket = await context.api.getRocket(parent.rocket as string);
         return {
-          rocket,
+          rocket: rocket ?? null,
           fairings: (parent as any)?.fairings,
-          rocket_name: rocket.name,
-          rocket_type: rocket.type,
+          rocket_name: rocket?.name ?? null,
+          rocket_type: rocket?.type ?? null,
         };
-      } else return parent.rocket;
+      } else return parent.rocket ?? null;
     },
-    links: (parent, args, context) => {
+    links: (parent) => {
       const links = parent.links as any;
+      if (!links) return null;
       return {
-        ...parent.links,
-        article_link: links?.article,
-        flickr_images: links?.flickr?.original,
-        reddit_campaign: links?.reddit?.campaign,
-        reddit_launch: links?.reddit?.launch,
-        reddit_media: links?.reddit?.media,
-        reddit_recovery: links?.reddit?.recovery,
-        video_link: links?.webcast,
+        ...links,
+        article_link: links.article,
+        flickr_images: links.flickr?.original,
+        reddit_campaign: links.reddit?.campaign,
+        reddit_launch: links.reddit?.launch,
+        reddit_media: links.reddit?.media,
+        reddit_recovery: links.reddit?.recovery,
+        video_link: links.webcast,
       };
     },
     launch_date_local: (parent: any) => parent?.date_local,
@@ -91,13 +92,12 @@ const resolvers: Resolvers = {
     launch_success: (parent: any) => parent?.launch_success,
     launch_year: (parent: any) => parent?.date_local?.slice(0, 4),
     mission_name: (parent: any) => parent?.name,
-    mission_id: (parent) => [parent.id],
+    mission_id: (parent) => [parent.id ?? null],
     telemetry: (parent) => {
-      return parent.telemetry;
+      return parent.telemetry ?? null;
     },
     upcoming: async (parent) => {
-      await new Promise((r) => setTimeout(r, 3000));
-      return parent.upcoming;
+      return parent.upcoming ?? null;
     },
   },
   History: {
@@ -105,7 +105,7 @@ const resolvers: Resolvers = {
       const data = await context.api.queryNextLaunch({
         flight_number: (parent as any)?.flight_number,
       });
-      return data.length > 0 ? data[0] : undefined;
+      return data && data.length > 0 ? data[0] : null;
     },
   },
 };
