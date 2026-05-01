@@ -10,6 +10,32 @@ Public cloud GraphQL endpoint
 
 👉 This is effectively a single-subgraph GraphQL service, so we map Apollo’s checklist (router, subgraphs, clients) proportionally.
 
+## 1.1 Discovery & Pre-Testing Questions
+Before architecting this suite, the following discovery questions were prioritized:
+1. **What is the source of truth?** Since we proxy `api.spacexdata.com/v4`, how do we handle schema drift when the REST API changes? (Answer: Schema-first development with breaking change detection).
+2. **What are the "expensive" nodes?** Which resolvers involve heavy data transformation or multiple REST calls? (Answer: Identified via N+1 detection in CI).
+3. **How does the system fail?** Does the graph return partial data or a total error when a REST endpoint is down? (Answer: Null-handling resilience tests).
+4. **Who are the consumers?** Is this for internal tooling or public consumption? (Answer: Public; necessitates introspection hardening and complexity limits).
+
+## 1.2 Prioritized Scenarios (Top 4)
+We prioritized these scenarios to ensure maximum reliability with minimum manual overhead:
+1. **Schema Evolution (Breaking Change Detection):** Using `graphql-inspector` to prevent accidental removal of fields that clients rely on.
+2. **Resilience to Upstream "Nulls":** Validating that the graph remains usable even if specific REST fields (like `missions`) return null after the MongoDB deprecation.
+3. **Recursive Query Safety:** Hardening the server against "Query of Death" attacks using depth and complexity limiting.
+4. **Autonomous Anomaly Detection:** Using the `src/qa/` agent to find "unknown unknowns" by fuzzing the schema and monitoring for latency spikes (>1.5s).
+
+## 1.3 Out of Scope (Conscious Omissions)
+Due to the initial project phase and time constraints, the following were excluded:
+*   **Full Load Testing:** While latency is monitored, high-concurrency stress testing (e.g., k6) is documented as a future goal but not currently gated in CI.
+*   **Real-time Subscriptions:** The upstream REST API does not provide a websocket/streaming interface, making subscriptions artificial for this proxy.
+*   **Mutations Testing:** The primary value of this graph is data exploration; user-write mutations are currently secondary.
+
+## 1.4 AI-Assisted Strategy Methodology
+This strategy was developed using Gemini Code Assist and Claude to bridge the gap between "standard testing" and "autonomous QE."
+*   **The Prompt:** "Given a SpaceX REST proxy GraphQL API, generate a test strategy based on Apollo's Production Readiness checklist that includes autonomous query generation."
+*   **The Result:** Initial output was too generic.
+*   **The Change:** I refined the AI suggestions to focus specifically on the REST-to-GraphQL transformation risks and the need for a "Failure Memory" in the autonomous agent (`qa-memory.json`).
+
 2. Production Readiness Dimensions → Test Strategy Mapping
 
 Apollo defines four areas:

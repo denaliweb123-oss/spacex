@@ -94,7 +94,7 @@ Tests use Jest with `ts-jest`. All test files live under `src/__tests__/`. Jest 
 | `PORT` | Server port (default: 4001) |
 | `NODE_ENV` | Set to `production` to disable introspection |
 | `APOLLO_KEY` | Apollo Studio API key |
-| `APOLLO_GRAPH_REF` | Apollo graph reference (e.g. `spacex-l4uc6p@main`) |
+| `APOLLO_GRAPH_REF` | Apollo graph reference (e.g. `SpaceX-pxxbxen@current`) |
 | `PRODUCTION_URL` | Production router URL for schema publish |
 
 ## Schema Changes
