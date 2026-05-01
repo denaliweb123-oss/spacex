@@ -68,13 +68,14 @@ Each request receives a `DataSourceContext` (defined in [src/types/DataSourceCon
 - [src/qa/agents/coverage-agent.ts](src/qa/agents/coverage-agent.ts) — records failures for CI artifact upload.
 - [src/qa/memory/qa-memory.json](src/qa/memory/qa-memory.json) — persists QA state between runs.
 
-## Testing
+## Testing (Standardized Structure)
 
-Tests use Jest with `ts-jest`. All test files live under `src/__tests__/`. Jest `roots` is set to `src`, so files outside that directory are not picked up.
+Tests use Jest with `ts-jest`. All test files live under the top-level `tests/` directory.
 
-- **Integration Tests (`src/__tests__/integration/`):** `repo.test.ts`, `launches.integration.test.ts`, `snapshot.test.ts`, `errors.test.ts`.
-- **Unit Tests (`src/__tests__/unit/`):** `api.test.ts`, `limit-offset-service.test.ts`, `parse-service.test.ts`.
-- **[src/__tests__/autonomous/](src/__tests__/autonomous/)** — AI-driven tests: `contract.agent.test.ts`, `security.agent.test.ts`, `schema.intelligence.test.ts`, `performance.agent.test.ts`, `service.agent.test.ts`, `ai.qa.test.ts` (runs the full autonomous QA cycle via `src/qa/runner.ts`).
+- **Integration Tests (`tests/integration/`):** `launches.integration.test.ts`, `full-query-flow.test.ts`.
+- **Unit Tests (`tests/unit/`):** `api.test.ts`, `resolvers/launches.test.ts`.
+- **Contract Tests (`tests/contract/`):** `schema.diff.test.ts`, `query.compliance.test.ts`.
+- **Performance Tests (`tests/performance/`):** `load.test.ts`.
 
 ## Test Strategy
 

@@ -1,7 +1,11 @@
-import API from "../api";
+import API from '../api';
+import { SpaceXService } from '../services/SpaceXService';
 
-//This interface is used with graphql-codegen to generate types for resolvers context
+/**
+ * Context passed to every resolver.
+ */
 export interface DataSourceContext {
-  auth?: string;
   api: API;
+  spacexService: SpaceXService;
+  // Other context properties (auth, ip, etc.)
 }

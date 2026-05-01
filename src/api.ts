@@ -48,7 +48,7 @@ export default class API {
   getHistoryEvent(id: string) {
     return this.get<History>(`history/${id}`);
   }
-  queryHistoryEvent(query: Object) {
+  queryHistoryEvent(query: object) {
     return this.post<Array<History>>("history/query", query);
   }
   getLandpads() {
@@ -75,7 +75,7 @@ export default class API {
   getNextLaunch() {
     return this.get<Launch>(`launches/next`, 5);
   }
-  queryNextLaunch(query: Object) {
+  queryNextLaunch(query: object) {
     return this.post<Array<Launch>>("launches/query", query);
   }
   getRockets() {
@@ -84,7 +84,7 @@ export default class API {
   getRocket(id: string) {
     return this.get<Rocket>(`rockets/${id}`);
   }
-  queryRocket(query: Object) {
+  queryRocket(query: object) {
     return this.post<RocketsResult>(`rockets/query`, query);
   }
   getShips() {
@@ -93,7 +93,7 @@ export default class API {
   getShip(id: string) {
     return this.get<Ship>(`ships/${id}`);
   }
-  queryShips(query: Object) {
+  queryShips(query: object) {
     return this.post<ShipsResult>(`ships/query`, query);
   }
   getLaunchPads() {
@@ -108,7 +108,7 @@ export default class API {
   getPayload(id: string) {
     return this.get<Payload>(`payloads/${id}`);
   }
-  queryPayloads(query: Object) {
+  queryPayloads(query: object) {
     return this.post<Array<Payload>>(`payloads/query`, query);
   }
   getRoadster() {
@@ -118,7 +118,7 @@ export default class API {
     const response = await fetch(`${this.baseUrl}/v${version}/${slug}`);
     return (await response.json()) as T;
   }
-  private async post<T>(slug: string, obj: Object, version = 4) {
+  private async post<T>(slug: string, obj: object, version = 4) {
     const response = await fetch(`${this.baseUrl}/v${version}/${slug}`, {
       method: "POST",
       body: JSON.stringify(obj),

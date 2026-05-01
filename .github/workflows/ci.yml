@@ -7,57 +7,159 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
+# Cancel any in-progress run for the same branch so pushes don't queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 env:
-  APOLLO_KEY: ${{ secrets.APOLLO_KEY }}
-  APOLLO_GRAPH_REF: ${{ secrets.APOLLO_GRAPH_REF }}
+  NODE_VERSION: "22"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 1 — Install
+# Validates that the dependency tree resolves cleanly with the locked versions.
+# All subsequent jobs restore from npm's cache, so npm ci is near-instant.
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  test:
-    name: Build, Test, and Validate Schema
+  install:
+    name: "1 · Install"
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 2 — Lint
+# ESLint over src/ and tests/.  Runs in parallel with unit tests so a style
+# issue never blocks a failing-test signal.
+# ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: "2 · Lint"
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Test with coverage
-        run: npm test -- --coverage --runInBand
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Validate GraphQL schema
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 3 — Unit Tests
+# Pure unit tests (no network, no server start).  Fast gate before the heavier
+# integration and contract stages.
+# ─────────────────────────────────────────────────────────────────────────────
+  unit:
+    name: "3 · Unit Tests"
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit -- --ci
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 4 — Integration Tests (mocked)
+# All external HTTP is intercepted by MSW — no real SpaceX API calls.
+# Coverage is measured here across unit + integration paths combined.
+#
+# HARD FAIL: jest exits non-zero when any coverageThreshold in jest.config.js
+# is not met, blocking the build stage.
+# ─────────────────────────────────────────────────────────────────────────────
+  integration:
+    name: "4 · Integration Tests"
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Integration tests (mocked)
+        run: npm run test:integration -- --ci
+
+      - name: Coverage enforcement  # HARD FAIL if thresholds drop
+        run: npm run test:coverage -- --ci
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 5 — Contract Tests + Schema Diff
+# Runs contract test suite and compares schema.graphql against the base branch.
+#
+# HARD FAIL (schema break): graphql-inspector exits 1 on any breaking change.
+# HARD FAIL (contract mismatch): jest exits 1 on any contract test failure.
+# ─────────────────────────────────────────────────────────────────────────────
+  contract:
+    name: "5 · Contract Tests"
+    needs: unit
+    runs-on: ubuntu-latest
+    env:
+      APOLLO_KEY: ${{ secrets.APOLLO_KEY }}
+      APOLLO_GRAPH_REF: ${{ secrets.APOLLO_GRAPH_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history required for git-based schema diff
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Contract tests  # HARD FAIL on mismatch
+        run: npm run test:contract -- --ci
+
+      - name: Schema diff  # HARD FAIL on breaking change
         run: |
-          node -e "
-            const { validateSchema } = require('graphql');
-            const { buildSubgraphSchema } = require('@apollo/subgraph');
-            const gql = require('graphql-tag');
-            const { readFileSync } = require('fs');
-            const schema = buildSubgraphSchema({
-              typeDefs: gql(readFileSync('schema.graphql', 'utf8')),
-              resolvers: {},
-            });
-            const errors = validateSchema(schema);
-            if (errors.length) {
-              console.error(errors.map(error => error.message).join('\n'));
-              process.exit(1);
-            }
-            console.log('GraphQL schema is valid');
-          "
+          git fetch --no-tags origin main 2>/dev/null || true
+          if git rev-parse origin/main >/dev/null 2>&1; then
+            npx graphql-inspector diff \
+              "git:origin/main:schema.graphql" \
+              schema.graphql \
+              --failOnBreaking
+          else
+            echo "No origin/main to compare against — skipping diff on initial push"
+          fi
 
-      - name: Apollo schema check
+      - name: Apollo schema check (advisory, skipped when key absent)
         if: ${{ env.APOLLO_KEY != '' && env.APOLLO_GRAPH_REF != '' }}
         run: |
           curl -sSL https://rover.apollo.dev/nix/latest | sh
@@ -66,5 +168,73 @@ jobs:
             --schema schema.graphql \
             --name subgraph-template-typescript-apollo-server
 
-      - name: Autonomous QA
-        run: npm test -- --runTestsByPath src/__tests__/autonomous/ai.qa.test.ts --runInBand
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 6 — Build
+# Runs only after lint, integration, and contract all pass.
+# Validates that codegen + tsc produce a clean output and that the compiled
+# schema is structurally valid before any artifact is shipped.
+# ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: "6 · Build"
+    needs: [lint, integration, contract]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (codegen + tsc)
+        run: npm run build
+
+      - name: Validate compiled schema
+        run: |
+          node -e "
+            const { validateSchema } = require('graphql');
+            const { buildSubgraphSchema } = require('@apollo/subgraph');
+            const gql = require('graphql-tag');
+            const { readFileSync } = require('fs');
+            const schema = buildSubgraphSchema({
+              typeDefs: gql(readFileSync('schema.graphql', 'utf-8')),
+              resolvers: {},
+            });
+            const errors = validateSchema(schema);
+            if (errors.length) {
+              console.error(errors.map(e => e.message).join('\n'));
+              process.exit(1);
+            }
+            console.log('schema valid');
+          "
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 7 — Performance Smoke Test
+# Runs after a successful build to catch regressions in query throughput.
+# Uses --runInBand to prevent parallel test workers from inflating timings.
+# ─────────────────────────────────────────────────────────────────────────────
+  performance:
+    name: "7 · Performance Smoke Test"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Performance smoke test
+        run: npm run test:perf -- --ci

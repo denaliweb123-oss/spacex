@@ -42,7 +42,7 @@ export const parsePayloads = (data: any, query: any) => {
   let match: number;
   data.forEach((launch: Launch) => {
     launch.rocket?.second_stage?.payloads?.forEach(payloadObj => {
-      let payload = parsePayloadObj(payloadObj);
+      const payload = parsePayloadObj(payloadObj);
       match = 0;
       if (Object.keys(query).length !== 0) {
         Object.entries(query).forEach(([key, value]) => {
@@ -66,7 +66,7 @@ export const parsePayload = (payload: any, payload_id: any) => {
   const { payloads } = payload.rocket.second_stage;
   let index = 0;
   const parsedPayloads = payloads.map((payloadObj: any, i: number) => {
-    let payload = parsePayloadObj(payloadObj);
+    const payload = parsePayloadObj(payloadObj);
     if (payload.id === payload_id) {
       index = i;
     }

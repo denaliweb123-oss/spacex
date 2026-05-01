@@ -4,10 +4,11 @@ import {
   startStandaloneServer,
 } from "@apollo/server/standalone";
 import { createProductionApolloServer } from "./graphql/server";
+import pkg from "../package.json";
+import { DataSourceContext } from "./types/DataSourceContext";
 
 const port = process.env.PORT ?? "4001";
-const subgraphName = require("../package.json").name;
-import { DataSourceContext } from "./types/DataSourceContext";
+const subgraphName = pkg.name;
 import API from "./api";
 
 const context: ContextFunction<
