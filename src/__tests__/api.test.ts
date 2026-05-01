@@ -1,22 +1,50 @@
-import API from '../api';
+import API from "../api";
 
-describe('API Service Unit Tests', () => {
+jest.mock("node-fetch");
+const fetch = require("node-fetch");
+
+describe("API", () => {
   let api: API;
 
   beforeEach(() => {
     api = new API();
+    fetch.mockReset();
+    fetch.mockResolvedValue({ json: async () => ({}) } as any);
   });
 
-  it('defines all required resource methods', () => {
-    expect(api.getCapsules).toBeDefined();
-    expect(api.getShips).toBeDefined();
-    expect(api.getLaunches).toBeDefined();
-    expect(api.getRockets).toBeDefined();
+  it("constructs with the correct base URL", () => {
+    expect(api.baseUrl).toBe("https://api.spacexdata.com");
   });
 
-  it('implements getLaunch with an ID argument', () => {
-    const spy = jest.spyOn(api as any, 'get').mockResolvedValue({});
-    api.getLaunch('101');
-    expect(spy).toHaveBeenCalledWith('launches/101', 5);
+  it("getLaunches calls /v4/launches", async () => {
+    fetch.mockResolvedValue({ json: async () => [{ id: "1" }] } as any);
+    const result = await api.getLaunches();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v4/launches"));
+    expect(result).toEqual([{ id: "1" }]);
+  });
+
+  it("getLaunch calls /v5/launches/:id", async () => {
+    fetch.mockResolvedValue({ json: async () => ({ id: "abc" }) } as any);
+    const result = await api.getLaunch("abc");
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v5/launches/abc"));
+    expect(result).toEqual({ id: "abc" });
+  });
+
+  it("getRocket calls /v4/rockets/:id", async () => {
+    fetch.mockResolvedValue({ json: async () => ({ id: "falcon9" }) } as any);
+    await api.getRocket("falcon9");
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v4/rockets/falcon9"));
+  });
+
+  it("getPastLaunches calls /v5/launches/past", async () => {
+    fetch.mockResolvedValue({ json: async () => [] } as any);
+    await api.getPastLaunches();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v5/launches/past"));
+  });
+
+  it("getShip calls /v4/ships/:id", async () => {
+    fetch.mockResolvedValue({ json: async () => ({ ship_id: "S1" }) } as any);
+    await api.getShip("S1");
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v4/ships/S1"));
   });
 });
