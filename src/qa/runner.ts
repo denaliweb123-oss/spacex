@@ -8,22 +8,50 @@ import API from "../api";
 import { generateQueries } from "./generators/query-generator";
 import { fuzzQuery } from "./agents/fuzz-agent";
 import { detectAnomaly } from "./agents/anomaly-agent";
-import { recordFailure } from "./agents/coverage-agent";
+import { CoverageFailure, recordFailure } from "./agents/coverage-agent";
 
-export async function runAutonomousQA(): Promise<{
+export interface AutonomousQaMetrics {
   totalQueriesExecuted: number;
   totalAnomaliesDetected: number;
   highSeverityAnomalies: number;
   mediumSeverityAnomalies: number;
-}> {
+  anomalies: CoverageFailure[];
+}
+
+export interface AutonomousQaOptions {
+  writeMetrics?: boolean;
+}
+
+function buildQaServer(): ApolloServer {
   const schemaSDL = readFileSync("schema.graphql", "utf-8");
   const typeDefs = gql(schemaSDL);
 
   const schema = buildSubgraphSchema({ typeDefs, resolvers });
 
-  const server = new ApolloServer({
+  return new ApolloServer({
     schema,
   });
+}
+
+export async function replayFailure(failure: CoverageFailure): Promise<string | null> {
+  const server = buildQaServer();
+  const start = Date.now();
+  const res = await server.executeOperation(
+    { query: failure.field },
+    { contextValue: { api: new API() } }
+  );
+  const duration = Date.now() - start;
+  await server.stop();
+
+  const hasError = res.body.kind === "single" && !!res.body.singleResult.errors;
+  return detectAnomaly({ duration, hasError });
+}
+
+export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promise<AutonomousQaMetrics> {
+  const schemaSDL = readFileSync("schema.graphql", "utf-8");
+  const typeDefs = gql(schemaSDL);
+  const schema = buildSubgraphSchema({ typeDefs, resolvers });
+  const server = buildQaServer();
 
   const resolverFields = new Set(Object.keys(resolvers.Query ?? {}));
   const queries = generateQueries(schema, resolverFields);
@@ -32,6 +60,7 @@ export async function runAutonomousQA(): Promise<{
   let totalAnomaliesDetected = 0;
   let highSeverityAnomalies = 0;
   let mediumSeverityAnomalies = 0;
+  const anomalies: CoverageFailure[] = [];
 
   for (const query of queries) {
     const fuzzed = fuzzQuery(query);
@@ -67,12 +96,15 @@ export async function runAutonomousQA(): Promise<{
         else mediumSeverityAnomalies++;
         totalAnomaliesDetected++;
 
-        recordFailure({
+        const failure: CoverageFailure = {
           timestamp: new Date().toISOString(),
           field: q,
           reason: anomaly,
           severity,
-        });
+        };
+
+        anomalies.push(failure);
+        recordFailure(failure);
       }
     }
   }
@@ -86,6 +118,12 @@ export async function runAutonomousQA(): Promise<{
     mediumSeverityAnomalies,
     lastRun: new Date().toISOString(),
   };
-  writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
-  return metrics;
+  if (options.writeMetrics ?? true) {
+    writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
+  }
+
+  return {
+    ...metrics,
+    anomalies,
+  };
 }

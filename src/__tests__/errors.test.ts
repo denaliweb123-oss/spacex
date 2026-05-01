@@ -1,17 +1,11 @@
-import { ApolloServer } from "@apollo/server";
-import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync } from "fs";
-import gql from "graphql-tag";
-import { buildSubgraphSchema } from "@apollo/subgraph";
 import API from "../api";
-import { formatError } from "../graphql/security/errorFormatter";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
+import { createProductionApolloServer } from "../graphql/server";
 
 jest.mock("../api");
 
-const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
-const server = new ApolloServer({
-  schema: buildSubgraphSchema({ typeDefs, resolvers }),
-  formatError,
+const server = createProductionApolloServer({
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 afterAll(() => server.stop());

@@ -1,22 +1,14 @@
-import { readFileSync } from "fs";
-import gql from "graphql-tag";
-import { ApolloServer, ContextFunction } from "@apollo/server";
+import { ContextFunction } from "@apollo/server";
 import {
   StandaloneServerContextFunctionArgument,
   startStandaloneServer,
 } from "@apollo/server/standalone";
-import responseCachePlugin from "@apollo/server-plugin-response-cache";
-import { ApolloServerPluginCacheControl } from "@apollo/server/plugin/cacheControl";
-import { validationRules } from "./graphql/security/validationRules";
-import { formatError } from "./graphql/security/errorFormatter";
+import { createProductionApolloServer } from "./graphql/server";
 
 const port = process.env.PORT ?? "4001";
-import resolvers from "./resolvers";
 const subgraphName = require("../package.json").name;
 import { DataSourceContext } from "./types/DataSourceContext";
 import API from "./api";
-import { buildSubgraphSchema } from "@apollo/subgraph";
-import { parse, print } from "graphql";
 
 const context: ContextFunction<
   [StandaloneServerContextFunctionArgument],
@@ -26,56 +18,7 @@ const context: ContextFunction<
 });
 
 async function main() {
-  const typeDefs = gql(
-  readFileSync("schema.graphql", {
-    encoding: "utf-8",
-  })
-);
-
-  const server = new ApolloServer({
-  schema: buildSubgraphSchema({ typeDefs, resolvers }),
-  validationRules,
-  formatError,
-  introspection: process.env.NODE_ENV !== "production",
-  plugins: [
-      ApolloServerPluginCacheControl({ defaultMaxAge: 86400 }),
-      responseCachePlugin({
-        shouldWriteToCache: async (requestContext) => {
-          if (
-            requestContext.operationName != "IntrospectionQuery" &&
-            !requestContext?.operationName
-              ?.toLowerCase()
-              ?.includes("introspection")
-          ){
-            console.log(
-              `Hash: ${requestContext.queryHash}\n\tAge: ${
-                requestContext.overallCachePolicy.maxAge
-            }\n\tOperation: ${
-              (requestContext.source ?? "")
-                .replace(/\n/g, "")
-                .replace(/\t/g, "")
-              }\n\tVariables: ${JSON.stringify(
-                requestContext.request.variables
-              )}`
-            );
-          }
-          return false;
-        },
-      }),
-      {
-        async serverWillStart() {
-          return {
-            async renderLandingPage() {
-              const html = `
-              <!DOCTYPE html>
-              <meta http-equiv="Refresh" content="0; url='https://studio.apollographql.com/public/SpaceX-pxxbxen/explorer?variant=current'" />`;
-              return { html };
-            },
-          };
-        },
-      },
-    ],
-  });
+  const server = createProductionApolloServer();
   const { url } = await startStandaloneServer(server, {
     context,
     listen: { port: Number.parseInt(port) },

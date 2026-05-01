@@ -1,2 +1,70 @@
-- name: Run Autonomous QA
-  run: npm test -- ai.qa.test.ts
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APOLLO_KEY: ${{ secrets.APOLLO_KEY }}
+  APOLLO_GRAPH_REF: ${{ secrets.APOLLO_GRAPH_REF }}
+
+jobs:
+  test:
+    name: Build, Test, and Validate Schema
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test with coverage
+        run: npm test -- --coverage --runInBand
+
+      - name: Validate GraphQL schema
+        run: |
+          node -e "
+            const { validateSchema } = require('graphql');
+            const { buildSubgraphSchema } = require('@apollo/subgraph');
+            const gql = require('graphql-tag');
+            const { readFileSync } = require('fs');
+            const schema = buildSubgraphSchema({
+              typeDefs: gql(readFileSync('schema.graphql', 'utf8')),
+              resolvers: {},
+            });
+            const errors = validateSchema(schema);
+            if (errors.length) {
+              console.error(errors.map(error => error.message).join('\n'));
+              process.exit(1);
+            }
+            console.log('GraphQL schema is valid');
+          "
+
+      - name: Apollo schema check
+        if: ${{ env.APOLLO_KEY != '' && env.APOLLO_GRAPH_REF != '' }}
+        run: |
+          curl -sSL https://rover.apollo.dev/nix/latest | sh
+          echo "$HOME/.rover/bin" >> "$GITHUB_PATH"
+          "$HOME/.rover/bin/rover" subgraph check "$APOLLO_GRAPH_REF" \
+            --schema schema.graphql \
+            --name subgraph-template-typescript-apollo-server
+
+      - name: Autonomous QA
+        run: npm test -- --runTestsByPath src/__tests__/autonomous/ai.qa.test.ts --runInBand

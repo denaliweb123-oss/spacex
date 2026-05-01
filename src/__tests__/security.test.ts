@@ -1,23 +1,17 @@
-import { ApolloServer } from "@apollo/server";
-import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync } from "fs";
-import gql from "graphql-tag";
-import resolvers from "../resolvers";
 import { validationRules } from "../graphql/security/validationRules";
 import { createComplexityLimitRule } from "graphql-validation-complexity";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
+import { createProductionApolloServer } from "../graphql/server";
 
 jest.mock("../api", () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({})),
 }));
 
-const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 const ctx = { contextValue: { api: new (require("../api").default)() } };
 
 function buildServer(opts: { rules?: any[]; introspection?: boolean } = {}) {
-  return new ApolloServer({
-    schema: buildSubgraphSchema({ typeDefs, resolvers }),
+  return createProductionApolloServer({
     validationRules: opts.rules ?? validationRules,
     ...(opts.introspection !== undefined && { introspection: opts.introspection }),
     plugins: [ApolloServerPluginInlineTraceDisabled()],
