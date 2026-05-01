@@ -1,6 +1,6 @@
 import { ApolloServer } from "@apollo/server";
 import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../resolvers";
 import API from "../api";
@@ -10,7 +10,12 @@ import { fuzzQuery } from "./agents/fuzz-agent";
 import { detectAnomaly } from "./agents/anomaly-agent";
 import { recordFailure } from "./agents/coverage-agent";
 
-export async function runAutonomousQA() {
+export async function runAutonomousQA(): Promise<{
+  totalQueriesExecuted: number;
+  totalAnomaliesDetected: number;
+  highSeverityAnomalies: number;
+  mediumSeverityAnomalies: number;
+}> {
   const schemaSDL = readFileSync("schema.graphql", "utf-8");
   const typeDefs = gql(schemaSDL);
 
@@ -23,9 +28,14 @@ export async function runAutonomousQA() {
   const resolverFields = new Set(Object.keys(resolvers.Query ?? {}));
   const queries = generateQueries(schema, resolverFields);
 
+  let totalQueriesExecuted = 0;
+  let totalAnomaliesDetected = 0;
+  let highSeverityAnomalies = 0;
+  let mediumSeverityAnomalies = 0;
+
   for (const query of queries) {
     const fuzzed = fuzzQuery(query);
-
+    totalQueriesExecuted += 1 + fuzzed.length; // Original query + fuzzed variants
     for (const [index, q] of [query, ...fuzzed].entries()) {
       const isFuzz = index > 0;
       const start = Date.now();
@@ -53,6 +63,10 @@ export async function runAutonomousQA() {
             ? "MEDIUM"
             : "HIGH";
 
+        if (severity === "HIGH") highSeverityAnomalies++;
+        else mediumSeverityAnomalies++;
+        totalAnomaliesDetected++;
+
         recordFailure({
           timestamp: new Date().toISOString(),
           field: q,
@@ -64,4 +78,14 @@ export async function runAutonomousQA() {
   }
 
   await server.stop();
+
+  const metrics = {
+    totalQueriesExecuted,
+    totalAnomaliesDetected,
+    highSeverityAnomalies,
+    mediumSeverityAnomalies,
+    lastRun: new Date().toISOString(),
+  };
+  writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
+  return metrics;
 }
