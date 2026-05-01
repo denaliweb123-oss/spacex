@@ -50,8 +50,10 @@ async function main() {
             console.log(
               `Hash: ${requestContext.queryHash}\n\tAge: ${
                 requestContext.overallCachePolicy.maxAge
-              }\n\tOperation: ${
-                requestContext.source.replaceAll("\n","").replaceAll("\t","")
+            }\n\tOperation: ${
+              (requestContext.source ?? "")
+                .replace(/\n/g, "")
+                .replace(/\t/g, "")
               }\n\tVariables: ${JSON.stringify(
                 requestContext.request.variables
               )}`
