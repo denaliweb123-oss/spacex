@@ -1,6 +1,6 @@
 import { ApolloServer } from "@apollo/server";
+import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync } from "fs";
-import resolvers from "../resolvers";
 import gql from "graphql-tag";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import API from "../api";

@@ -1,7 +1,7 @@
 import { ApolloServer } from "@apollo/server";
+import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync } from "fs";
 import gql from "graphql-tag";
-import { buildSubgraphSchema } from "@apollo/subgraph";
 import resolvers from "../resolvers";
 import { validationRules } from "../graphql/security/validationRules";
 import { createComplexityLimitRule } from "graphql-validation-complexity";

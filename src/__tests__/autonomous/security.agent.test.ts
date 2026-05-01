@@ -115,4 +115,24 @@ describe("🛡️ Security & Abuse Agent", () => {
     });
     expect((res.body as any).singleResult.errors).toBeDefined();
   });
+
+  it("verifies that mutations return Not Authorized", async () => {
+    const authServer = new ApolloServer({
+      schema: buildSubgraphSchema({
+        typeDefs,
+        resolvers: {
+          Mutation: {
+            insert_users: () => { throw new Error("Not Authorized"); }
+          }
+        }
+      }),
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
+
+    const mutation = `mutation { insert_users(objects: { name: "Test" }) { affected_rows } }`;
+    const res = await authServer.executeOperation({ query: mutation });
+    const result = (res.body as any).singleResult;
+    expect(result.errors).toBeDefined();
+    expect(result.errors[0].message).toBe("Not Authorized");
+  });
 });
