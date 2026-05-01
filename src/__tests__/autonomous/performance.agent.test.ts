@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../resolvers";
 import { buildSubgraphSchema } from "@apollo/subgraph";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import API from "../../api";
 
 const typeDefs = gql(
@@ -16,6 +17,7 @@ const server = new ApolloServer({
     typeDefs,
     resolvers,
   }),
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 describe("⚡ Performance & Resilience Agent", () => {

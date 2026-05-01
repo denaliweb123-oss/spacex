@@ -3,6 +3,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../resolvers";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import API from "../../api";
 
 jest.mock("../../api", () => ({
@@ -46,6 +47,7 @@ const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 
 const server = new ApolloServer({
   schema: buildSubgraphSchema({ typeDefs, resolvers }),
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 const ctx = { contextValue: { api: new API() } };

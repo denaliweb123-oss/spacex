@@ -25,7 +25,7 @@ This graph is meant for exploring historical SpaceX data. Any current space laun
 
 🛰 You can send operations to this graph through its cloud router: https://main--spacex-pxxbxen.apollographos.net/graphql
 
-## 🧪 Quality Engineering & Autonomous Testing
+## Quality Assurance & Testing
 
 🧪 This project employs a multi-layered automated QE strategy to ensure schema stability and production readiness. We use a combination of standard testing tools and custom autonomous agents:
 
@@ -140,16 +140,12 @@ Minimum enforced thresholds:
 *   Full validation of API boundary
 *   Critical path coverage for GraphQL resolvers
 
-1. **Schema Integrity:** Blocking breaking changes and ensuring SDL documentation standards.
-2. **Security Hardening:** Validating depth limits, complexity thresholds, and introspection safety.
-3. **Performance Monitoring:** Identifying N+1 query patterns and high-latency resolvers.
-4. **Resilience:** Null-handling suites to ensure graceful degradation when upstream REST data is missing.
-
 ### Running Tests
 ```bash
 npm test                        # Run all tests
-npm test -- src/__tests__/autonomous  # Run autonomous QA system
+npm test -- src/__tests__/autonomous/ai.qa.test.ts # Run autonomous QA runner
 npx jest src/__tests__/autonomous/contract.agent.test.ts # Run contract tests
+npm test -- src/__tests__/autonomous               # Run all autonomous agents
 ```
 
 ### 🧠 Design Principles
@@ -183,6 +179,6 @@ Detailed strategy documentation can be found in `docs/test-strategy.md`.
 
 ## Questions or Issues
 
-If you have any questions or issues with this project, come find us on Discord to talak about it!
+If you have any questions or issues with this project, come find us on Discord to talk about it!
 
 <a href="https://discord.gg/graphos"><img src="https://discord.com/api/guilds/1022972389463687228/widget.png?style=banner2"></a>

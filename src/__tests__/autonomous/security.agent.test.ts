@@ -6,6 +6,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import API from "../../api";
 import { validationRules } from "../../graphql/security/validationRules";
 import depthLimit from "graphql-depth-limit";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../api", () => ({
   __esModule: true,
@@ -49,6 +50,7 @@ const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 const server = new ApolloServer({
   schema: buildSubgraphSchema({ typeDefs, resolvers }),
   validationRules,
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 const ctx = { contextValue: { api: new API() } };
@@ -71,6 +73,7 @@ describe("🛡️ Security & Abuse Agent", () => {
     const strictServer = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       validationRules: [depthLimit(6)],
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
     const res = await strictServer.executeOperation(
       {
@@ -105,6 +108,7 @@ describe("🛡️ Security & Abuse Agent", () => {
     const hardenedServer = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       introspection: false,
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
     const res = await hardenedServer.executeOperation({
       query: `{ __schema { types { name } } }`,

@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../resolvers";
 import { buildSubgraphSchema } from "@apollo/subgraph";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 // Load the schema definition
 const typeDefs = gql(
@@ -15,6 +16,7 @@ function buildServer() {
   return new ApolloServer({
     schema: buildSubgraphSchema({ typeDefs, resolvers }),
     // Introspection should be enabled for these tests
+    plugins: [ApolloServerPluginInlineTraceDisabled()],
     introspection: true,
   });
 }
