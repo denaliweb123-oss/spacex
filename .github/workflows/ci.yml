@@ -151,7 +151,7 @@ jobs:
         run: |
           git fetch --no-tags origin main 2>/dev/null || true
           if git rev-parse origin/main >/dev/null 2>&1; then
-            npx graphql-inspector diff \
+            npx @graphql-inspector/cli diff \
               "git:origin/main:schema.graphql" \
               schema.graphql \
               --failOnBreaking
