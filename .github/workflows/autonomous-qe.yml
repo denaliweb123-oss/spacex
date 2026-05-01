@@ -148,7 +148,7 @@ jobs:
         run: npm ci
 
       - name: Run null-handling tests
-        run: npx jest src/__tests__/autonomous/service.agent.test.ts --no-coverage
+        run: npx jest src/__tests__/launches.integration.test.ts --no-coverage
 
   # ---------------------------------------------------------------------------
   # Autonomous QA Suite — every push
@@ -169,7 +169,7 @@ jobs:
         run: npm ci
 
       - name: Run Autonomous QA Suite
-        run: npm run test -- src/__tests__/autonomous
+        run: npx jest src/__tests__/autonomous
 
       - name: Upload QA Metrics Artifact
         uses: actions/upload-artifact@v4

@@ -1,39 +1,70 @@
 import { ApolloServer } from "@apollo/server";
-import { readFileSync } from "fs";
-import resolvers from "../resolvers";
-import gql from "graphql-tag";
 import { buildSubgraphSchema } from "@apollo/subgraph";
-import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
+import { readFileSync } from "fs";
+import gql from "graphql-tag";
+import resolvers from "../resolvers";
+import API from "../api";
+import { formatError } from "../graphql/security/errorFormatter";
 
-describe("Error Handling & Masking Integration", () => {
-  it("masks stack traces in production environment", async () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+jest.mock("../api");
 
-    const server = new ApolloServer({
-      schema: buildSubgraphSchema({
-        typeDefs: gql(readFileSync("schema.graphql", "utf-8")),
-        resolvers: {
-          Query: {
-            launches: () => { throw new Error("Internal DB Failure"); }
-          }
-        },
-      }),
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
+const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
+const server = new ApolloServer({
+  schema: buildSubgraphSchema({ typeDefs, resolvers }),
+  formatError,
+});
 
-    const res = await server.executeOperation({
-      query: "{ launches { id } }"
-    });
+afterAll(() => server.stop());
 
-    expect(res.body.kind).toBe("single");
-    const result = (res.body as any).singleResult;
-    
-    // In production, the message might be masked or at least the stacktrace extension should be gone
-    const error = result.errors[0];
-    expect(error.extensions?.stacktrace).toBeUndefined();
-    
-    // Cleanup
-    process.env.NODE_ENV = originalEnv;
+function mockApi(): jest.Mocked<API> {
+  return new API() as jest.Mocked<API>;
+}
+
+describe("Error handling", () => {
+  it("returns a GraphQL error for an unknown field", async () => {
+    const api = mockApi();
+    const res = await server.executeOperation(
+      { query: `{ doesNotExist }` },
+      { contextValue: { api } }
+    );
+    const errors = (res.body as any).singleResult.errors;
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it("returns a GraphQL error for invalid syntax", async () => {
+    const api = mockApi();
+    const res = await server.executeOperation(
+      { query: `{ launches { ` },
+      { contextValue: { api } }
+    );
+    const errors = (res.body as any).singleResult.errors;
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it("returns null data (not a thrown error) when a resolver returns null", async () => {
+    const api = mockApi();
+    api.getLaunch.mockResolvedValue(null as any);
+    const res = await server.executeOperation(
+      { query: `{ launch(id: "missing") { id } }` },
+      { contextValue: { api } }
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launch).toBeNull();
+  });
+
+  it("surfaces a resolver rejection as a GraphQL error without leaking internals", async () => {
+    const api = mockApi();
+    api.getLaunches.mockRejectedValue(new Error("Internal DB failure"));
+    const res = await server.executeOperation(
+      { query: `{ launches { id } }` },
+      { contextValue: { api } }
+    );
+    const errors = (res.body as any).singleResult.errors;
+    expect(errors).toBeDefined();
+    // formatError must not expose raw internal message to clients
+    const exposed = JSON.stringify(errors);
+    expect(exposed).not.toContain("Internal DB failure");
   });
 });

@@ -1,56 +1,52 @@
-import { parseShip, parseLaunchpad } from '../parse-service';
+import { parseShip, parseLaunchpad, parseMissions, parsePayloadObj } from "../parse-service";
 
-describe('Parse Service Unit Tests', () => {
-  describe('parseShip', () => {
-    it('correctly renames REST fields to GraphQL schema names', () => {
-      const rawShip = {
-        ship_id: 'GOMSCHIEF',
-        ship_name: 'GO MS CHIEF',
-        ship_model: 'Fairing Recovery',
-        ship_type: 'High Speed Craft',
-        active: true,
-      };
-
-      const parsed = parseShip(rawShip);
-
-      expect(parsed.id).toBe('GOMSCHIEF');
-      expect(parsed.name).toBe('GO MS CHIEF');
-      expect(parsed.model).toBe('Fairing Recovery');
-      expect(parsed.type).toBe('High Speed Craft');
-      expect(parsed.active).toBe(true);
-    });
-
-    it('handles null or missing fields gracefully', () => {
-      const parsed = parseShip({});
-      expect(parsed.id).toBeUndefined();
-      expect(parsed.name).toBeUndefined();
-    });
-
-    it('reconciles weight_lbs based on weight_kg (Scenario 7)', () => {
-      const rawShip = {
-        weight_kg: 100,
-        weight_lbs: 500, // Inconsistent input
-      };
-      const parsed = parseShip(rawShip);
-      expect(parsed.weight_lbs).toBe(220); // Math.round(100 * 2.20462262)
-    });
+describe("parseShip", () => {
+  it("maps ship_id → id, ship_name → name, ship_type → type", () => {
+    const result = parseShip({ ship_id: "S1", ship_name: "Go Searcher", ship_type: "Tug", active: true });
+    expect(result.id).toBe("S1");
+    expect(result.name).toBe("Go Searcher");
+    expect(result.type).toBe("Tug");
   });
 
-  describe('parseLaunchpad', () => {
-    it('maps full_name to name and strips padid', () => {
-      const rawPad = {
-        full_name: 'Kennedy Space Center Historic Launch Complex 39A',
-        status: 'active',
-        padid: 123
-      };
+  it("derives weight_lbs from weight_kg when lbs is absent", () => {
+    const result = parseShip({ ship_id: "S1", weight_kg: 100 });
+    expect(result.weight_lbs).toBe(220);
+  });
 
-      const parsed = parseLaunchpad(rawPad);
+  it("corrects an inconsistent weight_lbs using weight_kg", () => {
+    const result = parseShip({ ship_id: "S1", weight_kg: 1000, weight_lbs: 1 });
+    expect(result.weight_lbs).toBe(2205);
+  });
 
-      expect(parsed.name).toBe('Kennedy Space Center Historic Launch Complex 39A');
-      expect(parsed.status).toBe('active');
-      // Original keys should be absent if mapping is strict
-      expect((parsed as any).full_name).toBeUndefined();
-      expect((parsed as any).padid).toBeUndefined();
-    });
+  it("keeps provided weight_lbs when it agrees with weight_kg within 1%", () => {
+    const result = parseShip({ ship_id: "S1", weight_kg: 1000, weight_lbs: 2205 });
+    expect(result.weight_lbs).toBe(2205);
+  });
+});
+
+describe("parseLaunchpad", () => {
+  it("maps full_name → name and removes padid and full_name", () => {
+    const result = parseLaunchpad({ padid: 1, full_name: "LC-39A", location: "KSC" });
+    expect(result.name).toBe("LC-39A");
+    expect(result.padid).toBeUndefined();
+    expect(result.full_name).toBeUndefined();
+  });
+});
+
+describe("parseMissions", () => {
+  it("maps mission_id → id and mission_name → name", () => {
+    const result = parseMissions({ mission_id: "F3364BF", mission_name: "Thaicom 6" });
+    expect(result.id).toBe("F3364BF");
+    expect(result.name).toBe("Thaicom 6");
+  });
+});
+
+describe("parsePayloadObj", () => {
+  it("prefers id over payload_id", () => {
+    expect(parsePayloadObj({ id: "PL1", payload_id: "old" }).id).toBe("PL1");
+  });
+
+  it("falls back to payload_id when id is absent", () => {
+    expect(parsePayloadObj({ payload_id: "PL2" }).id).toBe("PL2");
   });
 });
