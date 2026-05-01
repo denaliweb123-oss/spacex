@@ -89,6 +89,51 @@ describe("Launches — Query Resolvers", () => {
     expect((res.body as any).singleResult.data.launch).toBeNull();
   });
 
+  it("accepts a variable for the launch id and coerces it correctly", async () => {
+    const api = mockApi();
+    api.getLaunch.mockResolvedValue(RAW_LAUNCH as any);
+    const res = await server.executeOperation(
+      {
+        query: `query GetLaunch($id: ID!) { launch(id: $id) { id mission_name } }`,
+        variables: { id: "abc123" },
+      },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect(api.getLaunch).toHaveBeenCalledWith("abc123");
+    expect((res.body as any).singleResult.data.launch.id).toBe("abc123");
+    expect((res.body as any).singleResult.data.launch.mission_name).toBe("Starlink-15");
+  });
+
+  it("returns a variable coercion error when a required variable is omitted", async () => {
+    const api = mockApi();
+    const res = await server.executeOperation(
+      {
+        query: `query GetLaunch($id: ID!) { launch(id: $id) { id } }`,
+        variables: {},
+      },
+      ctx(api)
+    );
+    const errors = (res.body as any).singleResult.errors;
+    expect(errors).toBeDefined();
+    expect(errors[0].message).toMatch(/variable.*id/i);
+    expect(api.getLaunch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a nullable variable and passes it through", async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      {
+        query: `query GetLaunches($limit: Int) { launches(limit: $limit) { id } }`,
+        variables: { limit: 1 },
+      },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launches).toHaveLength(1);
+  });
+
   it("launchLatest delegates to getLatestLaunch", async () => {
     const api = mockApi();
     api.getLatestLaunch.mockResolvedValue(RAW_LAUNCH as any);
