@@ -113,7 +113,7 @@ jobs:
         run: npm ci
 
       - name: Run N+1 detection tests
-        run: npx jest src/__tests__/autonomous/n-plus-one.agent.test.ts --no-coverage --verbose
+        run: npx jest src/__tests__/autonomous/performance.agent.test.ts --no-coverage --verbose
 
   # ---------------------------------------------------------------------------
   # Null-handling edge case suite — every push
@@ -133,7 +133,7 @@ jobs:
         run: npm ci
 
       - name: Run null-handling tests
-        run: npx jest src/__tests__/autonomous/null-handling.agent.test.ts --no-coverage
+        run: npx jest src/__tests__/autonomous/service.agent.test.ts --no-coverage
 
   # ---------------------------------------------------------------------------
   # Autonomous QA Suite — every push
@@ -183,7 +183,7 @@ jobs:
         run: npm ci
 
       - name: Generate failure report
-        run: npx jest src/__tests__/autonomous/failure-report.agent.test.ts --no-coverage --verbose
+        run: npx jest src/__tests__/autonomous/ai.qa.test.ts --no-coverage --verbose
         continue-on-error: true
 
       - name: Upload failure report
