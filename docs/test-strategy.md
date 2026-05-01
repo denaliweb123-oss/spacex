@@ -1,95 +1,246 @@
-Test Strategy — SpaceX API (GraphQL-Readiness Perspective)
-1) Questions asked before starting testing
+Schema-Driven GraphQL Query System Strategy
+(with Cost & Safety Controls)
+1. Core Principle: Schema is the Contract, Queries are the Workload
 
-Before designing the test suite, I focused on understanding both functional behavior and GraphQL readiness risks. The key questions were:
+In a production GraphQL system:
 
-API understanding
-What are the core data models (e.g., launches, rockets, missions, capsules)?
-What relationships exist between entities (nested vs flat data)?
-Which fields are most frequently queried by clients?
-GraphQL readiness (even if API is REST today)
-If this were converted to GraphQL, what would the schema look like?
-Which entities would become root types vs nested types?
-Where would resolver complexity likely emerge?
-Data integrity & correctness
-Are there inconsistencies in naming, formatting, or domain fields (e.g., dates, status)?
-Are relationships always valid (e.g., launch ↔ rocket references)?
-Reliability & performance
-Which endpoints/queries are most expensive (large datasets like launches)?
-How does the API behave under repeated or nested access patterns?
-Failure behavior
-What happens when invalid IDs or filters are used?
-How does the system behave with missing or partial data?
-2) Prioritized test scenarios (3–5) and rationale
+The schema defines what is possible
+Queries define how expensive the system becomes
 
-Given limited time, I prioritized scenarios based on risk, user impact, and GraphQL future compatibility.
+Therefore:
 
-1. Core “happy-path” data retrieval
+Every field has a behavioral cost
+Every query has a compute budget
+Every resolver is a risk surface
 
-What: Fetch primary entities (e.g., launches, rockets, missions) with valid parameters
-Why: This represents the most common user behavior and validates baseline correctness of the API.
+We treat GraphQL as a:
 
-2. Nested relationship integrity (GraphQL-equivalent concern)
+costed query execution engine over a typed graph
 
-What: Validate linked entities (e.g., launch → rocket → mission data consistency)
-Why: In GraphQL, these become nested resolvers. This is where most real-world failures (nulls, broken joins) occur.
+2. Schema Design Rules (Cost-Aware First)
 
-3. Error handling & invalid inputs
+Every schema field MUST define:
 
-What: Invalid IDs, malformed queries, missing parameters
-Why: Ensures predictable API behavior and validates resilience against bad client requests.
+2.1 Field metadata model (conceptual)
 
-4. Data shape & type consistency
+Each field is classified as:
 
-What: Validate response structure (required fields, types, nullability consistency)
-Why: Critical for future GraphQL migration where strict schema contracts are enforced.
+cheap → direct property lookup
+medium → single service call / join
+expensive → fan-out / external API / aggregation
 
-5. Filter / query behavior validation (if applicable)
+Example:
 
-What: Filtering launches by year, status, or attributes
-Why: Filters often become GraphQL arguments (in, eq, etc.), and correctness here prevents future schema issues.
+type Launch {
+  id: ID!                 # cheap
+  mission: String         # cheap
+  rocket: Rocket          # medium
+  telemetry: Telemetry    # expensive (external system)
+}
+2.2 Schema constraints
 
-3) What was NOT tested (and why)
+All types must define:
 
-Given time constraints, I deliberately excluded the following:
+nullability rules
+pagination rules for lists
+maximum depth expectations (documented)
+2.3 Required schema governance rules
+No field added without:
+cost classification
+owner (service/team)
+resolver performance expectation
+All breaking changes must be versioned or deprecated
+3. Query Cost Model (Core Safety Layer)
 
-1. Exhaustive endpoint coverage
-❌ Not testing every single endpoint permutation
-Why: Low marginal value; most share underlying patterns already validated by core scenarios.
-2. Deep performance/load testing
-❌ No large-scale stress or concurrency testing
-Why: Requires dedicated infrastructure and is better handled in a separate performance testing phase.
-3. Full combinatorial filter testing
-❌ Not testing all possible filter combinations
-Why: Exponential complexity with low additional insight beyond representative cases.
-4. UI or frontend integration flows
-❌ Not testing frontend behavior
-Why: Out of scope; focus is API correctness and contract stability.
-5. Rare or deprecated fields
-❌ Legacy or low-usage attributes excluded
-Why: Focus was placed on production-relevant and schema-stable fields.
-4) Key risks & edge cases (GraphQL-focused perspective)
+Every query is assigned a numeric cost score.
 
-Even though the API is REST-based, I evaluated it through a GraphQL production lens:
+3.1 Cost formula (simplified)
+QueryCost =
+  Σ(field cost × depth multiplier × list multiplier)
+3.2 Example
+query {
+  launches {
+    rocket {
+      telemetry {
+        temperature
+      }
+    }
+  }
+}
 
-1. N+1 query risk (future GraphQL concern)
-Nested relationships could lead to inefficient resolver chains if converted to GraphQL.
-2. Schema drift risk
-Inconsistent field naming or structure could break clients if a GraphQL schema is introduced.
-3. Null propagation issues
-Missing nested entities may produce partial responses that are hard to reason about in a GraphQL model.
-4. Data inconsistency across relationships
-Example: launch references a rocket that is missing or mismatched.
-5. Unbounded query complexity (future risk)
-If converted to GraphQL, deeply nested queries could become expensive or abused without query depth limits.
-6. Type instability
-Inconsistent formatting (dates, enums, stringified arrays) could violate strict GraphQL schema types later.
-5) Use of AI tools during strategy phase
+Cost increases because:
 
-AI tools were used as a supporting assistant for exploration, not decision authority.
+launches → list multiplier
+rocket → nested traversal
+telemetry → expensive external call
+3.3 Cost thresholds
+Tier	Limit
+Simple queries	≤ 100
+Standard queries	≤ 300
+Complex queries	≤ 500
+Blocked	> 500
+3.4 Enforcement rule
 
-What I prompted AI with:
-“Identify likely API risk areas for a SpaceX-style dataset API”
-“Suggest GraphQL test scenarios for nested space/launch data”
-“List edge cases for REST → GraphQL migration testing strategy”
-“What are common production GraphQL failure modes?”
+Any query exceeding threshold is rejected BEFORE execution.
+
+4. Query Depth & Shape Safety Controls
+4.1 Depth limiting
+Max depth: 8–12 levels (configurable)
+Applies recursively across all nested fields
+4.2 Breadth limiting
+
+Prevent:
+
+requesting too many sibling fields
+large list expansions without pagination
+
+Example rule:
+
+Lists MUST always be paginated (limit/offset or cursor)
+
+4.3 Shape validation
+
+Reject queries that:
+
+request unbounded arrays
+combine deep + wide traversal
+exceed complexity threshold even if shallow
+5. Resolver Safety Model
+
+Each resolver must follow:
+
+5.1 Resolver contract
+
+Every resolver defines:
+
+latency expectation (SLO)
+caching behavior (yes/no)
+batching eligibility (DataLoader required or not)
+5.2 N+1 prevention
+
+Mandatory:
+
+DataLoader or batching layer for:
+nested entity resolution
+repeated lookups
+5.3 Fan-out control
+
+If one field triggers:
+
+multiple downstream calls
+external APIs
+database joins
+
+Then it must be:
+
+cached OR
+rate-limited OR
+precomputed
+6. Safety Controls (Production Guardrails)
+6.1 Query rejection rules
+
+Reject if:
+
+cost exceeds threshold
+depth exceeds limit
+recursive patterns detected
+6.2 Rate limiting (per client + query shape)
+
+Limit by:
+
+API key
+client identity
+query complexity bucket
+6.3 Introspection policy
+Disabled in production OR
+Allowed only for authenticated internal users
+6.4 Timeout enforcement
+
+Hard timeout per query:
+
+Simple: 200ms–500ms
+Complex: max 1–2s
+Always kill runaway execution
+7. Schema Governance System
+7.1 Schema registry (required)
+
+All schema changes must go through:
+
+registry validation
+diff comparison
+breaking-change detection
+7.2 Breaking change rules
+
+A change is breaking if:
+
+field removed
+type changed
+nullability tightened
+enum values removed
+7.3 Deprecation policy
+Fields must be marked @deprecated
+Minimum deprecation window: 1 release cycle
+8. Observability Requirements
+
+Every query MUST emit:
+
+8.1 Metrics
+query cost
+execution time
+resolver breakdown
+cache hit ratio
+8.2 Tracing
+per-field latency tracing
+resolver-level spans
+8.3 Logging
+rejected queries (with reason)
+cost violations
+depth violations
+9. Performance Strategy
+9.1 Caching layers
+Field-level caching
+Query result caching (APQ-style)
+CDN caching for safe queries
+9.2 Data optimization
+batch resolvers
+avoid repeated joins
+precompute expensive aggregates
+10. Testing Strategy (Schema-Driven)
+
+All tests map directly to schema risks:
+
+Required tests:
+1. Schema validation test
+ensures schema compiles + is consistent
+2. Happy-path query test
+validates core query flows
+3. Nested query integrity test
+ensures resolver chains work
+4. Error propagation test
+null handling + partial failures
+5. Cost enforcement test
+ensures expensive queries are rejected
+6. Depth limit test
+ensures query rejection works correctly
+7. Filter correctness test
+validates in, nin, regex
+11. AI Usage in Strategy Design
+
+AI is used only for:
+
+Allowed:
+generating test case ideas
+identifying edge cases
+suggesting schema risks
+Not allowed:
+defining cost thresholds
+approving schema changes
+determining production safety rules
+AI audit requirements:
+
+Every AI-assisted decision must record:
+
+prompt used
+output received
+human modification
+final decision rationale
