@@ -1,139 +1,121 @@
-SpaceX GraphQL API
-Discord
+# SpaceX GraphQL API
 
-Deploy on Railway
+![Discord](https://img.shields.io/discord/1022972389463687228?logo=discord&logoColor=white&color=blue&style=flat&label=Discord)
 
-This graph is a recreation of the SpaceXLand/api project that was authored by Carlos Rufo. The code for this recreation is open source and can be viewed here.
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/WdJd2w?referralCode=xsbY2R)
 
-The original project used a MongoDB that was deprecated in favor of Launch Library 2; you can read about the issue here. The team plans to keep the REST API in place but unmaintained. This project utilized the REST API to implement the same schema, but there are some gaps that have been marked @deprecated. For example, Missions are not available in the REST API.
+This graph is a recreation of the [SpaceXLand/api](https://github.com/SpaceXLand/api) project that was authored by [Carlos Rufo](https://github.com/itscarlosrufo). The code for this recreation is open source and can be viewed [here](https://github.com/apollographql/spacex).
 
-You can try querying this graph using Explorer.
+The original project used a MongoDB that was deprecated in favor of Launch Library 2; you can read about the issue [here](https://github.com/r-spacex/SpaceX-API/issues/1243). The team plans to keep the REST API in place but unmaintained. This project utilized the REST API to implement the same schema, but there are some gaps that have been marked `@deprecated`. For example, `Missions` are not available in the REST API.
 
-What this graph is all about
-Open Source GraphQL API for launch, rocket, core, capsule, starlink, launchpad, and landing pad data possibly by a community effort from r-spacex.
+You can try querying this graph using [Explorer](https://studio.apollographql.com/public/spacex-l4uc6p/explorer?variant=main).
 
-This graph is meant for exploring historical SpaceX data. Any current space launch information can be found through The Space Dev's Launch Library v2 (LLv2) effort. If you are interested in this effort, there are a couple ways you can get active in it:
+## What this graph is all about
 
-Join The Space Dev's Discord Server to receive the latest updates
-The Apollo DevRel team started up an open sourced repository to create a GraphQL API for the LLv2. a. You can query the data of this graph here
-Join the Apollo Discord Server and we can help get you plugged in.
-Accessing this graph
-🛰 You can send operations to this graph through it's cloud router: https://main--spacex-l4uc6p.apollographos.net/graphql
+Open Source GraphQL API for launch, rocket, core, capsule, starlink, launchpad, and landing pad data possibly by a community effort from [r-spacex](https://github.com/r-spacex/SpaceX-API).
 
-🧪 Quality Engineering & Autonomous Testing
-This project implements a production-grade GraphQL Quality Engineering (QE) system designed to ensure schema stability, runtime safety, and continuous validation.
+This graph is meant for exploring historical SpaceX data. Any current space launch information can be found through [The Space Dev's Launch Library v2 (LLv2) effort](https://ll.thespacedevs.com/docs/). If you are interested in this effort, there are a couple ways you can get active in it:
 
-Testing is structured as a layered + autonomous system covering the full execution path:
+1. Join [The Space Dev's Discord Server](https://discord.gg/p7ntkNA) to receive the latest updates
+2. The Apollo DevRel team started up an [open sourced repository](https://github.com/apollographql/Space-Devs/issues) to create a GraphQL API for the LLv2. 
+  a. You can query the data of this graph [here](https://studio.apollographql.com/public/space-devs/home?variant=main)
+3. Join the [Apollo Discord Server](https://discord.gg/graphos) and we can help get you plugged in.
 
-GraphQL (Resolvers)
-        ↓
-Service Layer (parse-service, pagination)
-        ↓
-API Layer (REST integration)
-        ↓
-QA Agents (Schema, Contract, Fuzz, Anomaly)
-🛠️ Testing Framework & Tooling
-Category	Tooling
-Test Runner	Jest (ts-jest)
-GraphQL Execution	Apollo Server test client
-Schema Validation	GraphQL Inspector
-Mocking	Jest mocks
-Security Controls	Depth + complexity limits
-Autonomous QA	Custom agents (src/qa/)
-CI/CD	GitHub Actions
-🤖 Autonomous QA System
-The project includes a self-evolving QA system located in src/qa/ that continuously validates the GraphQL API.
+## Accessing this graph
 
-Capabilities
+🛰 You can send operations to this graph through its cloud router: https://main--spacex-pxxbxen.apollographos.net/graphql
 
-Schema-driven query generation
-Automatically derives queries from the live schema (no hardcoded cases)
-Fuzz testing (query mutation)
-Injects malformed and adversarial queries to detect edge-case failures
-Anomaly detection
-Flags:
-latency spikes (e.g. >1.5s)
-unexpected GraphQL errors
-unstable resolver behavior
-Failure memory & replay
-Failing queries are persisted and re-tested in subsequent runs
-🧪 Test Coverage Layers
-Unit Tests
-Resolver logic
-Service layer (parse-service, limit-offset-service)
-API layer (api.ts)
-Integration Tests
-End-to-end GraphQL execution
-Resolver → service → API interaction
-Contract Tests
-Schema stability validation
-Breaking change detection via GraphQL Inspector
-Security Tests
-Query depth limiting
-Complexity thresholds
-Introspection hardening
-Query injection simulation
-Performance & Resilience
-Concurrent query execution
-Latency threshold validation
-Null-handling and partial failure scenarios
-Autonomous QA (AI-driven)
-Schema-generated queries
-Fuzz mutation testing
-Runtime anomaly detection
-📊 Live Quality Metrics
+## 🧪 Quality Engineering & Autonomous Testing
+
+This project implements a production-grade GraphQL Quality Engineering (QE) system designed to ensure schema stability, runtime safety, and continuous validation. Testing is structured as a layered + autonomous system covering the full execution path:
+
+```mermaid
+graph TD
+    A[GraphQL Resolvers] --> B[Service Layer]
+    B --> C[REST API Integration]
+    C --> D[Autonomous QA Agents]
+```
+
+### 🛠️ Testing Framework & Tooling
+
+| Category | Tooling |
+| :--- | :--- |
+| **Test Runner** | Jest (`ts-jest`) |
+| **Execution** | Apollo Server test client |
+| **Validation** | GraphQL Inspector, Schema Linter |
+| **Security** | `graphql-depth-limit`, Custom complexity rules |
+| **Autonomous QA** | Custom AI-driven agents (`src/qa/`) |
+| **CI/CD** | GitHub Actions |
+
+### 🤖 Autonomous QA System
+
+Located in `src/qa/`, this self-evolving system continuously validates the GraphQL API:
+
+*   **Schema-driven generation**: Automatically derives valid queries from schema introspection (no hardcoded cases).
+*   **Fuzz testing**: Mutates queries to simulate syntax attacks and stealth introspection attempts.
+*   **Anomaly detection**: Flags responses that exceed 1500ms or contain unexpected execution errors.
+*   **Failure memory**: Persists state between runs to track bug resolution and regression.
+
+### 🧪 Test Coverage Layers
+
+1.  **Unit Tests**: Isolated logic for `parse-service` and `limit-offset` pagination math.
+2.  **Integration Tests**: End-to-end resolver execution against mocked REST responses.
+3.  **Contract Tests**: Ensures schema stability and blocks breaking changes via GraphQL Inspector.
+4.  **Security Tests**: Hardens query depth, complexity, and introspection safety.
+5.  **Performance & Resilience**: Detects N+1 query patterns and validates null-handling for upstream REST failures.
+6.  **Autonomous QA**: Runtime AI-driven fuzzing and anomaly monitoring.
+
+### 📊 Live Quality Metrics
 <!-- AUTONOMOUS_QA_METRICS_START -->
-Autonomous QA Metrics (Last Run: Pending CI):
 
+**Autonomous QA Metrics (Last Run: Pending CI):**
 | Metric | Value |
 |---|---|
 | Queries Executed | — |
 | Anomalies Detected | — |
 | High Severity | — |
 | Medium Severity (Latency) | — |
-<!-- AUTONOMOUS_QA_METRICS_END -->
-⚡ This section is automatically updated on every push to `main` by the autonomous QA runner (`src/qa/runner.ts`).
 
-⚙️ CI/CD Quality Gates
+<!-- AUTONOMOUS_QA_METRICS_END -->
+
+⚡ *This section is automatically updated by CI from test coverage and QA telemetry.*
+
+### ⚙️ CI/CD Quality Gates
+
 All quality checks are enforced in CI via GitHub Actions:
 
-✅ Unit + integration tests must pass ✅ Schema breaking changes blocked ✅ Autonomous QA must complete without critical anomalies
+*   ✅ **Unit + Integration**: All tests must pass.
+*   ✅ **Schema Diff**: Breaking changes are automatically blocked.
+*   ✅ **Autonomous QA**: Must complete without critical anomalies.
+*   ✅ **Coverage**: Thresholds are enforced for lines (75%) and functions (75%).
 
-Pull requests are blocked if any QE gate fails.
+### 🚀 Running Tests Locally
 
-📏 Coverage Strategy
-Coverage goals (not yet enforced in CI):
+```bash
+# Run all standard tests
+npm test
 
-| Metric | Target |
-|---|---|
-| Branches | 70% |
-| Functions | 75% |
-| Lines | 75% |
-| Statements | 75% |
+# Run the autonomous QA runner specifically
+npm test -- src/__tests__/autonomous/ai.qa.test.ts
 
-High coverage on service layer (business logic)
-Full validation of API boundary
-Critical path coverage for GraphQL resolvers
-🔐 Security & Governance
-Query depth and complexity limits enforced at runtime
-Introspection disabled in hardened environments
-Automated checks for schema exposure and unsafe fields (iterative)
-🚀 Running Tests Locally
-npm test                        # Run all tests
-npm test -- src/__tests__/autonomous  # Run autonomous QA system
-npx jest src/__tests__/autonomous/contract.agent.test.ts  # Run schema contract tests
-🧠 Design Principles
-Shift-left testing → catch issues before deployment
-Schema-first validation → treat GraphQL as a contract
-Defense-in-depth → security at query level
-Continuous feedback loops → CI + autonomous QA
-Deterministic + adaptive testing → static + generated tests
-📌 Summary
-This testing system transforms the API into a:
+# Run schema contract stability tests
+npx jest src/__tests__/autonomous/contract.agent.test.ts
+```
 
-✔ Self-validating GraphQL service ✔ Security-hardened query layer ✔ Performance-aware system ✔ Continuously tested platform
+### 🧠 Design Principles
 
-Detailed strategy documentation can be found in docs/test-strategy.md.
+*   **Shift-left testing**: Catch issues before they reach a live environment.
+*   **Schema-first validation**: Treat GraphQL as a strict contract between service and client.
+*   **Defense-in-depth**: Implement security at the query, resolver, and API levels.
+*   **Continuous feedback**: Automate documentation updates (metrics) based on real test data.
 
-Questions or Issues
+---
+
+> [!TIP]
+> Detailed strategy documentation, including discovery questions and prioritization logic, can be found in docs/test-strategy.md.
+
+## Questions or Issues
+
 If you have any questions or issues with this project, come find us on Discord to talk about it!
+
+<a href="https://discord.gg/graphos"><img src="https://discord.com/api/guilds/1022972389463687228/widget.png?style=banner2"></a>
