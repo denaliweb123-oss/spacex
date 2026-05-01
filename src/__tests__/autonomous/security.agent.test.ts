@@ -5,54 +5,100 @@ import resolvers from "../../resolvers";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import API from "../../api";
 import { validationRules } from "../../graphql/security/validationRules";
+import depthLimit from "graphql-depth-limit";
 
-const typeDefs = gql(
-  readFileSync("schema.graphql", {
-    encoding: "utf-8",
-  })
-);
+jest.mock("../../api", () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    getLaunches: () => Promise.resolve([]),
+    getPastLaunches: () => Promise.resolve([]),
+    getLaunch: () => Promise.resolve(null),
+    getRockets: () => Promise.resolve([]),
+    getRocket: () => Promise.resolve(null),
+    getCapsules: () => Promise.resolve([]),
+    getCapsule: () => Promise.resolve(null),
+    getShips: () => Promise.resolve([]),
+    getShip: () => Promise.resolve(null),
+    getLaunchPads: () => Promise.resolve([]),
+    getLaunchPad: () => Promise.resolve(null),
+    getDragons: () => Promise.resolve([]),
+    getDragon: () => Promise.resolve(null),
+    getCores: () => Promise.resolve([]),
+    getCore: () => Promise.resolve(null),
+    getPayloads: () => Promise.resolve([]),
+    getPayload: () => Promise.resolve(null),
+    getLandpads: () => Promise.resolve([]),
+    getLandpad: () => Promise.resolve(null),
+    getHistoryEvents: () => Promise.resolve([]),
+    getHistoryEvent: () => Promise.resolve(null),
+    company: () => Promise.resolve(null),
+    getRoadster: () => Promise.resolve(null),
+    getLatestLaunch: () => Promise.resolve(null),
+    getUpcomingLaunchs: () => Promise.resolve([]),
+    getNextLaunch: () => Promise.resolve(null),
+    queryNextLaunch: () => Promise.resolve([]),
+    queryRocket: () => Promise.resolve(null),
+    queryShips: () => Promise.resolve(null),
+    queryPayloads: () => Promise.resolve([]),
+    queryHistoryEvent: () => Promise.resolve([]),
+  })),
+}));
+
+const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 
 const server = new ApolloServer({
-  schema: buildSubgraphSchema({
-    typeDefs,
-    resolvers,
-  }),
+  schema: buildSubgraphSchema({ typeDefs, resolvers }),
   validationRules,
 });
 
+const ctx = { contextValue: { api: new API() } };
+
 describe("🛡️ Security & Abuse Agent", () => {
   it("rejects unknown fields (query injection attempt)", async () => {
-    const res = await server.executeOperation({
-      query: `{ __typename maliciousField }`,
-    }, {
-      contextValue: { api: new API() }
-    });
-
+    const res = await server.executeOperation(
+      { query: `{ __typename maliciousField }` },
+      ctx
+    );
     expect((res.body as any).singleResult.errors).toBeDefined();
   });
 
   it("blocks deep query attack simulation", async () => {
-    const res = await server.executeOperation({
-      query: `
-        query {
-          launchesPast {
-            rocket {
-              second_stage {
-                payloads {
-                  payload_mass_kg
-                  nationality
+    // The library fires when depthSoFar > maxDepth. This schema's deepest valid
+    // path (launchesPast→rocket→rocket→second_stage→payloads→composite_fairing→
+    // diameter→meters) reaches depthSoFar=7 at the leaf — exactly the production
+    // limit. To verify the guard actually fires, we use a test server with
+    // depthLimit(6); the same path reaches depthSoFar=7 on `meters`, 7>6 → error.
+    const strictServer = new ApolloServer({
+      schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      validationRules: [depthLimit(6)],
+    });
+    const res = await strictServer.executeOperation(
+      {
+        query: `
+          query {
+            launchesPast {
+              rocket {
+                rocket {
+                  second_stage {
+                    payloads {
+                      composite_fairing {
+                        diameter {
+                          meters
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
           }
-        }
-      `,
-    }, {
-      contextValue: { api: new API() }
-    });
-
+        `,
+      },
+      ctx
+    );
     const result = (res.body as any).singleResult;
-    expect(result.errors || result.data).toBeDefined();
+    expect(result.errors).toBeDefined();
+    expect(result.errors[0].message).toMatch(/exceeds maximum operation depth/i);
   });
 
   it("prevents schema introspection abuse in hardened mode", async () => {
@@ -60,11 +106,9 @@ describe("🛡️ Security & Abuse Agent", () => {
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       introspection: false,
     });
-
     const res = await hardenedServer.executeOperation({
       query: `{ __schema { types { name } } }`,
     });
-
     expect((res.body as any).singleResult.errors).toBeDefined();
   });
 });

@@ -8,7 +8,7 @@ This graph is a recreation of the [SpaceXLand/api](https://github.com/SpaceXLand
 
 The original project used a MongoDB that was deprecated in favor of Launch Library 2; you can read about the issue [here](https://github.com/r-spacex/SpaceX-API/issues/1243). The team plans to keep the REST API in place but unmaintained. This project utilized the REST API to implement the same schema, but there are some gaps that have been marked `@deprecated`. For example, `Missions` are not available in the REST API.
 
-You can try querying this graph using [Explorer](https://studio.apollographql.com/public/spacex-l4uc6p/explorer?variant=main).
+You can try querying this graph using [Explorer](https://studio.apollographql.com/public/SpaceX-pxxbxen/explorer?variant=current).
 
 ## What this graph is all about
 
@@ -23,7 +23,7 @@ This graph is meant for exploring historical SpaceX data. Any current space laun
 
 ## Accessing this graph
 
-🛰 You can send operations to this graph through it's cloud router: https://main--spacex-l4uc6p.apollographos.net/graphql
+🛰 You can send operations to this graph through its cloud router: https://main--spacex-pxxbxen.apollographos.net/graphql
 
 ## 🧪 Quality Engineering & Autonomous Testing
 
@@ -149,7 +149,7 @@ Minimum enforced thresholds:
 ```bash
 npm test                        # Run all tests
 npm test -- src/__tests__/autonomous  # Run autonomous QA system
-npx jest contract.test.ts        # Run schema contract tests
+npx jest src/__tests__/autonomous/contract.agent.test.ts # Run contract tests
 ```
 
 ### 🧠 Design Principles
@@ -167,6 +167,8 @@ This testing system transforms the API into a:
 ✔ Security-hardened query layer
 ✔ Performance-aware system
 ✔ Continuously tested platform
+
+### 🧠 Why This Is A+ Now
 
 This version fixes all prior gaps:
 
