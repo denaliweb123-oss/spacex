@@ -2,6 +2,14 @@
 
 exports[`Response Shape Snapshots matches the snapshot for a complex launch query 1`] = `
 {
-  "launch": null,
+  "launch": {
+    "id": "5eb87cd9ffd86e000604b32a",
+    "launch_year": "2006",
+    "mission_name": "FalconSat",
+    "rocket": {
+      "rocket_name": "Falcon 1",
+      "rocket_type": "Merlin A",
+    },
+  },
 }
 `;
