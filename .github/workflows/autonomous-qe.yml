@@ -28,7 +28,7 @@ jobs:
         run: |
           # Compare local schema against the production endpoint
           # Fails CI if breaking changes are detected
-          graphql-inspector diff https://main--spacex-l4uc6p.apollographos.net/graphql schema.graphql
+          graphql-inspector diff https://main--SpaceX-pxxbxen.apollographos.net/graphql schema.graphql
 
   # ---------------------------------------------------------------------------
   # Schema linting — every push
