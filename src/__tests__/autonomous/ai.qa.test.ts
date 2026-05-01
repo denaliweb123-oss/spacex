@@ -1,4 +1,5 @@
-import { runAutonomousQA } from "../../qa/runner";
+import { replayFailure, runAutonomousQA } from "../../qa/runner";
+import { forgetFailure, readFailureMemory } from "../../qa/agents/coverage-agent";
 
 jest.mock("../../api", () => {
   return {
@@ -41,7 +42,30 @@ jest.mock("../../api", () => {
 
 describe("🤖 Autonomous GraphQL QA System", () => {
   it("runs full AI QA cycle", async () => {
-    await runAutonomousQA();
-    expect(true).toBe(true);
+    const metrics = await runAutonomousQA({ writeMetrics: false });
+
+    expect(metrics.highSeverityAnomalies).toBe(0);
+    expect(metrics.anomalies.filter((anomaly) => anomaly.severity === "HIGH")).toEqual([]);
   }, 30000);
+});
+
+describe("Autonomous failure memory replay", () => {
+  const persistedFailures = readFailureMemory().failingQueries;
+
+  if (persistedFailures.length === 0) {
+    it("has no persisted high severity failures to replay", () => {
+      expect(persistedFailures).toEqual([]);
+    });
+  } else {
+    it.each(persistedFailures)(
+      "replays and clears recovered failure %#",
+      async (failure) => {
+        const anomaly = await replayFailure(failure);
+
+        expect(anomaly).toBeNull();
+        forgetFailure(failure);
+      },
+      30000
+    );
+  }
 });

@@ -1,17 +1,11 @@
-import { ApolloServer } from "@apollo/server";
-import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync } from "fs";
-import gql from "graphql-tag";
-import resolvers from "../resolvers";
 import API from "../api";
-import { formatError } from "../graphql/security/errorFormatter";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
+import { createProductionApolloServer } from "../graphql/server";
 
 jest.mock("../api");
 
-const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
-const server = new ApolloServer({
-  schema: buildSubgraphSchema({ typeDefs, resolvers }),
-  formatError,
+const server = createProductionApolloServer({
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 afterAll(() => server.stop());
@@ -27,9 +21,8 @@ describe("Error handling", () => {
       { query: `{ doesNotExist }` },
       { contextValue: { api } }
     );
-    const errors = (res.body as any).singleResult.errors;
-    expect(errors).toBeDefined();
-    expect(errors.length).toBeGreaterThan(0);
+    expect((res.body as any).singleResult.errors).toBeDefined();
+    expect((res.body as any).singleResult.errors.length).toBeGreaterThan(0);
   });
 
   it("returns a GraphQL error for invalid syntax", async () => {
@@ -38,9 +31,7 @@ describe("Error handling", () => {
       { query: `{ launches { ` },
       { contextValue: { api } }
     );
-    const errors = (res.body as any).singleResult.errors;
-    expect(errors).toBeDefined();
-    expect(errors.length).toBeGreaterThan(0);
+    expect((res.body as any).singleResult.errors).toBeDefined();
   });
 
   it("returns null data (not a thrown error) when a resolver returns null", async () => {
@@ -54,17 +45,17 @@ describe("Error handling", () => {
     expect((res.body as any).singleResult.data.launch).toBeNull();
   });
 
-  it("surfaces a resolver rejection as a GraphQL error without leaking internals", async () => {
+  it("masks internal error message — raw cause does not reach the client", async () => {
     const api = mockApi();
-    api.getLaunches.mockRejectedValue(new Error("Internal DB failure"));
+    api.getLaunches.mockRejectedValue(new Error("Internal DB failure: connection timeout"));
     const res = await server.executeOperation(
       { query: `{ launches { id } }` },
       { contextValue: { api } }
     );
     const errors = (res.body as any).singleResult.errors;
     expect(errors).toBeDefined();
-    // formatError must not expose raw internal message to clients
-    const exposed = JSON.stringify(errors);
-    expect(exposed).not.toContain("Internal DB failure");
+    expect(errors[0].message).toBe("Internal server error");
+    expect(JSON.stringify(errors)).not.toContain("connection timeout");
+    expect(JSON.stringify(errors)).not.toContain("Internal DB failure");
   });
 });
