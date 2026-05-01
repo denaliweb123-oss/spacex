@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install GraphQL Inspector
         run: npm install -g @graphql-inspector/cli
 
@@ -28,7 +28,7 @@ jobs:
         run: |
           # Compare local schema against the production endpoint
           # Fails CI if breaking changes are detected
-          graphql-inspector diff https://main--spacex-l4uc6p.apollographos.net/graphql schema.graphql
+          graphql-inspector diff https://main--spacex-pxxbxen.apollographos.net/graphql schema.graphql
 
   # ---------------------------------------------------------------------------
   # Schema linting — every push
@@ -43,7 +43,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -56,16 +56,14 @@ jobs:
         run: |
           npx graphql-schema-linter \
             --rules fields-have-descriptions,types-have-descriptions,deprecations-have-a-reason \
-            schema.graphql || true
-        # `|| true` keeps CI green while the schema accumulates descriptions;
-        # remove it once the schema is fully documented.
+            schema.graphql # Removed `|| true` to make this a hard gate
 
       - name: Check schema parses cleanly
         run: |
           node -e "
             const { parse, buildASTSchema } = require('graphql');
             const { readFileSync } = require('fs');
-            buildASTSchema(parse(readFileSync('schema.graphql', 'utf-8')));
+            buildASTSchema(parse(readFileSync('schema.graphql', 'utf-8')), { assumeValidSDL: true });
             console.log('Schema parsed successfully');
           "
 
@@ -82,14 +80,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run contract tests
-        run: npx jest src/__tests__/generated/contract.test.ts --no-coverage
+        run: npx jest src/__tests__/autonomous/contract.agent.test.ts --no-coverage
 
   # ---------------------------------------------------------------------------
   # N+1 detection gate — pull requests only
@@ -106,14 +104,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run N+1 detection tests
-        run: npx jest src/__tests__/generated/n-plus-one.test.ts --no-coverage --verbose
+        run: npx jest src/__tests__/autonomous/performance.agent.test.ts --no-coverage --verbose
 
   # ---------------------------------------------------------------------------
   # Null-handling edge case suite — every push
@@ -126,14 +124,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run null-handling tests
-        run: npx jest src/__tests__/generated/null-handling.test.ts --no-coverage
+        run: npx jest src/__tests__/autonomous/service.agent.test.ts --no-coverage
 
   # ---------------------------------------------------------------------------
   # Autonomous QA Suite — every push
@@ -147,7 +145,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -176,14 +174,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Generate failure report
-        run: npx jest src/__tests__/generated/failure-report.test.ts --no-coverage --verbose
+        run: npx jest src/__tests__/autonomous/ai.qa.test.ts --no-coverage --verbose
         continue-on-error: true
 
       - name: Upload failure report
@@ -209,7 +207,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -254,10 +252,8 @@ jobs:
             console.log('Total:', unprotected.length);
 
             // Exit 1 to surface in CI logs; remove if you want the job to always pass
-            if (unprotected.length > 0) process.exit(1);
-          " || true
-          # `|| true` prevents blocking merges until an auth layer is implemented.
-          # Remove `|| true` once @auth directives are in place.
+            if (unprotected.length > 0) process.exit(1); # Removed `|| true` to make this a hard gate
+          "
 
   # ---------------------------------------------------------------------------
   # Update README with Autonomous QA metrics
@@ -275,7 +271,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies

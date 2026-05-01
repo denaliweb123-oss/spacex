@@ -28,8 +28,8 @@ describe("🚀 Launches Integration Tests", () => {
     // Arrange: Mock the specific API response
     const mockLaunches = [
       {
-        id: "101",
-        name: "Starlink-15", // resolver maps parent.name → mission_name
+        flight_number: 101,
+        name: "Starlink-15", // REST v4 field; resolver maps parent.name → mission_name
         rocket: { rocket_name: "Falcon 9", rocket_type: "v1.2" },
       },
     ];

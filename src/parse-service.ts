@@ -1,12 +1,26 @@
 import { Launch } from "./__generated__/resolvers-types";
 
-export const parseShip = (ship: any) => ({
-  ...ship,
-  id: ship.ship_id,
-  name: ship.ship_name,
-  model: ship.ship_model,
-  type: ship.ship_type
-});
+export const parseShip = (ship: any) => {
+  const lbPerKg = 2.20462262;
+  let weight_lbs = ship.weight_lbs;
+
+  // Scenario 7 Enforcement: If kg is present, ensure lbs is mathematically consistent
+  if (ship.weight_kg) {
+    const expectedLbs = Math.round(ship.weight_kg * lbPerKg);
+    if (!weight_lbs || Math.abs(expectedLbs - weight_lbs) > expectedLbs * 0.01) {
+      weight_lbs = expectedLbs;
+    }
+  }
+
+  return {
+    ...ship,
+    id: ship.ship_id,
+    name: ship.ship_name,
+    model: ship.ship_model,
+    type: ship.ship_type,
+    weight_lbs
+  };
+};
 
 export const parseLaunchpad = (pad: any) => {
   pad.name = pad.full_name;
