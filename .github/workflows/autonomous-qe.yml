@@ -25,10 +25,16 @@ jobs:
         run: npm install -g @graphql-inspector/cli
 
       - name: Validate Schema Scalars & Breaking Changes
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://main--spacex-l4uc6p.apollographos.net/graphql' }}
         run: |
-          # Compare local schema against the production endpoint
-          # Fails CI if breaking changes are detected
-          graphql-inspector diff https://main--spacex-l4uc6p.apollographos.net/graphql schema.graphql
+          # Skip diff if the production endpoint is unreachable (not yet deployed,
+          # or temporarily down). When reachable, fail CI on any breaking change.
+          if curl --silent --max-time 5 --head "$PRODUCTION_URL" > /dev/null 2>&1; then
+            graphql-inspector diff "$PRODUCTION_URL" schema.graphql
+          else
+            echo "⚠️  Production endpoint unreachable — schema diff skipped."
+          fi
 
   # ---------------------------------------------------------------------------
   # Schema linting — every push
