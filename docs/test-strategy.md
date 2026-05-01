@@ -1,224 +1,95 @@
-1. Context & System Overview
+Test Strategy — SpaceX API (GraphQL-Readiness Perspective)
+1) Questions asked before starting testing
 
-The repository is a GraphQL API server recreating SpaceX data using a REST backend and exposed via an Apollo GraphQL endpoint .
+Before designing the test suite, I focused on understanding both functional behavior and GraphQL readiness risks. The key questions were:
 
-Key characteristics:
-Node/TypeScript GraphQL server (src/, schema.graphql)
-Uses REST data sources (non-federated)
-CI present (.circleci, .github)
-Public cloud GraphQL endpoint
+API understanding
+What are the core data models (e.g., launches, rockets, missions, capsules)?
+What relationships exist between entities (nested vs flat data)?
+Which fields are most frequently queried by clients?
+GraphQL readiness (even if API is REST today)
+If this were converted to GraphQL, what would the schema look like?
+Which entities would become root types vs nested types?
+Where would resolver complexity likely emerge?
+Data integrity & correctness
+Are there inconsistencies in naming, formatting, or domain fields (e.g., dates, status)?
+Are relationships always valid (e.g., launch ↔ rocket references)?
+Reliability & performance
+Which endpoints/queries are most expensive (large datasets like launches)?
+How does the API behave under repeated or nested access patterns?
+Failure behavior
+What happens when invalid IDs or filters are used?
+How does the system behave with missing or partial data?
+2) Prioritized test scenarios (3–5) and rationale
 
-👉 This is effectively a single-subgraph GraphQL service, so we map Apollo’s checklist (router, subgraphs, clients) proportionally.
+Given limited time, I prioritized scenarios based on risk, user impact, and GraphQL future compatibility.
 
-## 1.1 Discovery & Pre-Testing Questions
-Before architecting this suite, the following discovery questions were prioritized:
-1. **What is the source of truth?** Since we proxy `api.spacexdata.com/v4`, how do we handle schema drift when the REST API changes? (Answer: Schema-first development with breaking change detection).
-2. **What are the "expensive" nodes?** Which resolvers involve heavy data transformation or multiple REST calls? (Answer: Identified via N+1 detection in CI).
-3. **How does the system fail?** Does the graph return partial data or a total error when a REST endpoint is down? (Answer: Null-handling resilience tests).
-4. **Who are the consumers?** Is this for internal tooling or public consumption? (Answer: Public; necessitates introspection hardening and complexity limits).
+1. Core “happy-path” data retrieval
 
-## 1.2 Prioritized Scenarios (Top 4)
-We prioritized these scenarios to ensure maximum reliability with minimum manual overhead:
-1. **Schema Evolution (Breaking Change Detection):** Using `graphql-inspector` to prevent accidental removal of fields that clients rely on.
-2. **Resilience to Upstream "Nulls":** Validating that the graph remains usable even if specific REST fields (like `missions`) return null after the MongoDB deprecation.
-3. **Recursive Query Safety:** Hardening the server against "Query of Death" attacks using depth and complexity limiting.
-4. **Autonomous Anomaly Detection:** Using the `src/qa/` agent to find "unknown unknowns" by fuzzing the schema and monitoring for latency spikes (>1.5s).
+What: Fetch primary entities (e.g., launches, rockets, missions) with valid parameters
+Why: This represents the most common user behavior and validates baseline correctness of the API.
 
-## 1.3 Out of Scope (Conscious Omissions)
-Due to the initial project phase and time constraints, the following were excluded:
-*   **Full Load Testing:** While latency is monitored, high-concurrency stress testing (e.g., k6) is documented as a future goal but not currently gated in CI.
-*   **Real-time Subscriptions:** The upstream REST API does not provide a websocket/streaming interface, making subscriptions artificial for this proxy.
-*   **Mutations Testing:** The primary value of this graph is data exploration; user-write mutations are currently secondary.
+2. Nested relationship integrity (GraphQL-equivalent concern)
 
-## 1.4 AI-Assisted Strategy Methodology
-This strategy was developed using Gemini Code Assist and Claude to bridge the gap between "standard testing" and "autonomous QE."
-*   **The Prompt:** "Given a SpaceX REST proxy GraphQL API, generate a test strategy based on Apollo's Production Readiness checklist that includes autonomous query generation."
-*   **The Result:** Initial output was too generic.
-*   **The Change:** I refined the AI suggestions to focus specifically on the REST-to-GraphQL transformation risks and the need for a "Failure Memory" in the autonomous agent (`qa-memory.json`).
+What: Validate linked entities (e.g., launch → rocket → mission data consistency)
+Why: In GraphQL, these become nested resolvers. This is where most real-world failures (nulls, broken joins) occur.
 
-2. Production Readiness Dimensions → Test Strategy Mapping
+3. Error handling & invalid inputs
 
-Apollo defines four areas:
+What: Invalid IDs, malformed queries, missing parameters
+Why: Ensures predictable API behavior and validates resilience against bad client requests.
 
-GraphOS Studio
-Router
-Subgraphs/Servers
-Clients
+4. Data shape & type consistency
 
-We convert each into testable quality gates.
+What: Validate response structure (required fields, types, nullability consistency)
+Why: Critical for future GraphQL migration where strict schema contracts are enforced.
 
-3. Test Strategy by Domain
-3.1 Schema & Contract Testing (GraphOS Studio equivalent)
-Goals
+5. Filter / query behavior validation (if applicable)
 
-Ensure schema stability, backward compatibility, and safe evolution.
+What: Filtering launches by year, status, or attributes
+Why: Filters often become GraphQL arguments (in, eq, etc.), and correctness here prevents future schema issues.
 
-Tests
-Schema validation
-GraphQL SDL linting
-Static validation (build-time)
-Breaking change detection
-Use schema diff tools (e.g., graphql-inspector)
-Contract tests
-Snapshot GraphQL responses for critical queries
-CI Integration
-Fail build if:
-Breaking changes detected
-Schema invalid
-Why
+3) What was NOT tested (and why)
 
-Apollo recommends schema checks before deployment via CI/CD pipelines .
+Given time constraints, I deliberately excluded the following:
 
-3.2 API Functional Testing
-Scope
-Queries: launches, rockets, capsules, etc.
-Deprecated fields behavior
-Test Types
-Unit tests
-Resolver logic
-Data source transformations
-Integration tests
-Resolver ↔ REST API interaction
-End-to-end tests
-Execute real GraphQL queries against running server
-Example Cases
-Query returns expected shape
-Deprecated fields still respond (with warnings)
-Null handling and partial failures
-3.3 Security Testing
-Based on Apollo guidance:
-Disable introspection in production
-Limit malicious queries
-Tests
-Introspection disabled test
-Attempt __schema query → expect failure
-Query complexity / depth tests
-Send deeply nested queries → rejected
-Auth (if added later)
-Unauthorized access scenarios
-3.4 Performance & Load Testing
-Apollo requirement
-“Ensure that you’ve load-tested your graph”
-Strategy
-Use tools: k6 / Artillery
-Test scenarios
-Peak traffic simulation
-High concurrency queries
-Slow resolver identification
-Metrics
-Latency (p95, p99)
-Error rate
-Throughput
-Output
-Identify:
-Slow resolvers
-REST API bottlenecks
-3.5 Caching & Efficiency Testing
-Apollo recommendation
-Use APQ and caching layers
-Tests
-Cache hit/miss validation
-Persisted query behavior
-Response caching correctness
-Success criteria
-Reduced response time for repeated queries
-No stale data issues
-3.6 Observability & Monitoring Validation
-Apollo requirement
-Metrics, tracing, logging enabled
-Tests
-Logs generated per request
-Errors properly captured
-Traces show resolver timings
-Tools
-OpenTelemetry / Prometheus
-Apollo Studio (if connected)
-3.7 CI/CD Pipeline Testing
-Repo already includes CI config
-Required validations
-Run:
-Unit tests
-Schema checks
-Linting
-Block deploy on failure
-Additional tests
-Canary deployment validation
-Rollback testing
-3.8 Resilience & Failure Testing
-Scenarios
-REST API failure
-Timeout handling
-Partial data responses
-Tests
-Simulate upstream failure
-Validate:
-Graceful degradation
-Error masking (no internal leaks)
+1. Exhaustive endpoint coverage
+❌ Not testing every single endpoint permutation
+Why: Low marginal value; most share underlying patterns already validated by core scenarios.
+2. Deep performance/load testing
+❌ No large-scale stress or concurrency testing
+Why: Requires dedicated infrastructure and is better handled in a separate performance testing phase.
+3. Full combinatorial filter testing
+❌ Not testing all possible filter combinations
+Why: Exponential complexity with low additional insight beyond representative cases.
+4. UI or frontend integration flows
+❌ Not testing frontend behavior
+Why: Out of scope; focus is API correctness and contract stability.
+5. Rare or deprecated fields
+❌ Legacy or low-usage attributes excluded
+Why: Focus was placed on production-relevant and schema-stable fields.
+4) Key risks & edge cases (GraphQL-focused perspective)
 
-👉 Apollo emphasizes safe error handling to avoid leaking internals .
+Even though the API is REST-based, I evaluated it through a GraphQL production lens:
 
-3.9 Client Compatibility Testing
-Apollo requirement
-Clients must identify themselves
-Tests
-Verify headers:
-apollographql-client-name
-apollographql-client-version
-Compatibility tests
-Different query shapes
-Backward compatibility across versions
-4. Test Environment Strategy
-Environments
-Local → developer testing
-Staging → production-like validation
-Production
+1. N+1 query risk (future GraphQL concern)
+Nested relationships could lead to inefficient resolver chains if converted to GraphQL.
+2. Schema drift risk
+Inconsistent field naming or structure could break clients if a GraphQL schema is introduced.
+3. Null propagation issues
+Missing nested entities may produce partial responses that are hard to reason about in a GraphQL model.
+4. Data inconsistency across relationships
+Example: launch references a rocket that is missing or mismatched.
+5. Unbounded query complexity (future risk)
+If converted to GraphQL, deeply nested queries could become expensive or abused without query depth limits.
+6. Type instability
+Inconsistent formatting (dates, enums, stringified arrays) could violate strict GraphQL schema types later.
+5) Use of AI tools during strategy phase
 
-Apollo recommends environment variants (dev/staging/prod) .
+AI tools were used as a supporting assistant for exploration, not decision authority.
 
-5. Test Data Strategy
-Use:
-Mock REST responses
-Seeded datasets
-Ensure:
-Deterministic test runs
-Coverage of edge cases (missing data, deprecated fields)
-6. Entry / Exit Criteria
-Entry Criteria
-Schema defined
-CI pipeline configured
-Exit Criteria (Go-live readiness)
-✅ All tests passing
-✅ Load tests within SLA
-✅ No critical security issues
-✅ Observability verified
-✅ Rollback plan tested
-
-(Aligned with general production readiness gating practices )
-
-7. Tooling Recommendations
-Category	Tools
-Unit टेस्ट	Jest
-GraphQL testing	graphql-testing-library
-Schema checks	GraphQL Inspector
-Load testing	k6 / Artillery
-Observability	OpenTelemetry, Apollo Studio
-CI/CD	GitHub Actions / CircleCI
-8. Key Risks & Gaps in Current Repo
-
-From repo inspection:
-
-⚠️ No explicit load testing
-⚠️ No visible schema checks in CI
-⚠️ Likely introspection enabled by default
-⚠️ Limited observability setup
-9. Summary
-
-This strategy ensures the repo meets Apollo production standards by validating:
-
-Schema safety
-Performance under load
-Security hardening
-Operational visibility
-Client compatibility
-
-The biggest gap today is non-functional testing (performance, security, observability)—which Apollo explicitly emphasizes before production rollout.
+What I prompted AI with:
+“Identify likely API risk areas for a SpaceX-style dataset API”
+“Suggest GraphQL test scenarios for nested space/launch data”
+“List edge cases for REST → GraphQL migration testing strategy”
+“What are common production GraphQL failure modes?”
