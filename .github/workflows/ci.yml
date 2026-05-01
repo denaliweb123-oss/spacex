@@ -151,9 +151,12 @@ jobs:
         run: |
           git fetch --no-tags origin main 2>/dev/null || true
           if git rev-parse origin/main >/dev/null 2>&1; then
+            git show origin/main:schema.graphql > /tmp/schema_base.graphql
+            node scripts/strip-federation.js /tmp/schema_base.graphql /tmp/schema_base_stripped.graphql
+            node scripts/strip-federation.js schema.graphql /tmp/schema_head_stripped.graphql
             npx @graphql-inspector/cli diff \
-              "git:origin/main:schema.graphql" \
-              schema.graphql \
+              /tmp/schema_base_stripped.graphql \
+              /tmp/schema_head_stripped.graphql \
               --failOnBreaking
           else
             echo "No origin/main to compare against — skipping diff on initial push"
