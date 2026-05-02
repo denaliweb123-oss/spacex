@@ -25,6 +25,36 @@
 
 ---
 
+## Test coverage layers
+
+1. **Unit** — Resolver field-mapping (REST v4 field renames → GraphQL names), `parse-service` (weight derivation, field transforms), `limit-offset-service` (pagination edge cases), security middleware (depth, complexity, rate-limit rules in isolation), error masking, and autonomous QA agent behaviour (anomaly detection, failure recording, query generation).
+
+2. **Integration** — Full `Query → Resolver → Service → API` pipeline executed against MSW-intercepted REST responses. Covers happy path, error propagation, null handling, security rule enforcement (depth limit fires at depth 9, complexity limit fires, introspection blocked in production mode), response caching (`Cache-Control: max-age=86400`), N+1 detection, and autonomous anomaly detection.
+
+3. **Contract** — Every production query shape executed against the built subgraph schema. All 40+ root resolver fields covered by schema-derived query generation. Breaking change detection via GraphQL schema diff against `origin/main`.
+
+4. **E2E** — Full stack through MSW-intercepted REST. Launches query from GraphQL operation → Apollo Server → resolver → REST mock → response. Null propagation verified end-to-end (unknown ID → `null`, not an error).
+
+5. **Performance** — Concurrency floors validated in-process. SpaceX: 3 concurrent `launchesPast` queries complete under 2000 ms; 10 concurrent queries are all error-free. Countries (local only): single full-schema query with nested fields under 500 ms; 250-country dataset under 1000 ms; 10 concurrent requests under 2000 ms.
+
+6. **Autonomous QA** — Schema-derived queries generated at runtime, fuzzed with adversarial variants, executed against an in-process server. Any response exceeding 1500 ms (MEDIUM) or containing unexpected errors (HIGH) is flagged. Failures persisted to `qa-memory.json` and replayed on every subsequent run until resolved. Zero high-severity anomalies required to pass CI.
+
+---
+
+## Design principles
+
+**Shift-left** — Schema validation and unit tests run before integration, which runs before build. A type error or broken rule is caught in seconds, not after a multi-minute build.
+
+**Schema-first contract** — Production query shapes are validated against the local schema on every push. A field rename or type change that would break supergraph composition is caught before the schema reaches the registry.
+
+**Defense-in-depth** — Security enforced at three layers: validation (depth + complexity rules), resolver (null propagation, no data leakage), and API (error masking — stack traces never reach the client).
+
+**No live network in CI** — MSW intercepts all outbound HTTP. `tests/fixtures/launches.json` is version-pinned. Flakiness from upstream instability is structurally impossible, not managed by retry logic.
+
+**Continuous feedback** — Autonomous QA failure memory means a regression that appeared once will be retested on every subsequent run until it is explicitly resolved, not silently dropped.
+
+---
+
 ## Prioritized scenarios (top 5)
 
 Ranked by: likelihood of breakage × blast radius if broken.
