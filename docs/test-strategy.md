@@ -16,7 +16,7 @@
 - What are the depth/complexity limits and have they ever fired? → Configured but untested in prod.
 
 *CI constraints*
-- Can I avoid live network calls? → Yes. tests/fixtures/launches.json + MSW covers it.
+- Can I avoid live network calls? → Yes. tests/fixtures/launches.json + MSW covers it. External GraphQL APIs (Countries) are also fully mocked via MSW `graphql.link()` handlers.
 - Are there supergraph-level contract tests already? → No. This suite is the only gate.
 - Is load testing appropriate in this environment? → Not in CI — the upstream is a community API with no SLA and the server runs in-process during tests. A real load test needs staging infrastructure and a live target. The performance suite covers a concurrency smoke test only.
 
@@ -41,8 +41,8 @@ The upstream API is deprecated and returns null for several fields. GraphQL's nu
 **4. Schema contract** (`tests/contract/query.compliance.test.ts`, `tests/contract/contract.agent.test.ts`)
 This is a Federation subgraph. A field rename or type change that isn't caught locally breaks supergraph composition at deploy time. Contract tests catch this before the schema reaches the registry.
 
-**5. Performance smoke** (`tests/performance/query.load.test.ts`)
-No upstream rate limit means a resolver regression (e.g., removing caching, adding a blocking loop) won't surface in unit tests. A concurrency baseline in CI acts as a canary.
+**5. Performance smoke** (`tests/performance/query.load.test.ts`, `tests/performance/countries.load.test.ts`)
+No upstream rate limit means a resolver regression (e.g., removing caching, adding a blocking loop) won't surface in unit tests. A concurrency baseline in CI acts as a canary. The Countries latency suite adds a second baseline: full-schema queries with nested fields must resolve within defined thresholds.
 
 **6. N+1 Query Batching** (`tests/integration/nplusone.test.ts`)
 Fetching lists of entities (launches, ships) that require sub-queries (rockets, payloads) can lead to request waterfalls. 
@@ -57,7 +57,7 @@ within a single execution.
 
 **Auth and per-user access control** — this subgraph has no auth layer. Auth belongs to the federation gateway. If `@authenticated` directives are ever added, a separate suite is needed.
 
-**Live upstream calls** — excluded deliberately. The upstream has no SLA, network calls make CI flaky, and the MSW-mocked suite already validates response mapping. Accepted risk: silent upstream shape changes won't be caught until a fixture is updated manually.
+**Live upstream calls** — excluded deliberately. The SpaceX upstream has no SLA, network calls make CI flaky, and the MSW-mocked suite already validates response mapping. Accepted risk: silent upstream shape changes won't be caught until a fixture is updated manually. The Countries API is similarly mocked; live E2E calls against `countries.trevorblades.com` are not included in the standard CI run.
 
 **Unit tests for every resolver type** — the 40+ resolver types (capsules, dragons, ships, etc.) follow identical patterns: REST call → optional transform → return. Individually unit-testing each adds no signal beyond what parse-service and the integration tests already cover.
 
@@ -115,3 +115,27 @@ AI returned 10 queries. The alias explosion example used 100 aliases — below t
 > "Jest coverage shows statements 57%, branches 31%, functions 46%, lines 57%. Thresholds are 80/75/80/80 and CI is failing. What thresholds make sense as regression gates, not aspirational targets?"
 
 AI recommended actual minus 5 points as a regression buffer, and excluding entry points, CI scripts, and generated files. Applied: thresholds set to 55/28/44/55 (slightly tighter than the 5-point buffer because branch coverage is volatile across runs). Exclusions for `src/index.ts` and `src/qa/update-readme-metrics.ts` added; `src/__generated__/` was already excluded.
+
+---
+
+## Framework improvements (post-initial-strategy)
+
+The following changes were made after the initial strategy was implemented, based on framework analysis and test suite growth.
+
+**Branch coverage threshold raised: 28% → 60%**
+The original 28% threshold was set as a regression floor at a point when branch coverage was low and many resolver branches were untested. After adding resolver branch tests (launchpad, ships, history, payloads) and the Countries API suite, branch coverage rose to 88.41%. The threshold was raised to 60% to function as a meaningful CI gate rather than a pass-through.
+
+**`jest.clearAllMocks()` removed from `tests/setup.ts`**
+The setup file called `jest.clearAllMocks()` in `beforeEach`, which duplicated `clearMocks: true` in `jest.config.js`. Both perform the same operation. The config-level setting is retained as the single source; the redundant hook was removed to avoid confusion when debugging mock state between tests.
+
+**`ApolloServerPluginInlineTraceDisabled` added to `src/qa/runner.ts`**
+The QA runner's `buildQaServer()` was not passing `ApolloServerPluginInlineTraceDisabled`, so the Apollo inline-trace plugin ran on every query in `runAutonomousQA` and `replayFailure`. This added ~100ms of instrumentation overhead per execution, which caused `replay-failure.test.ts` to incorrectly flag clean query executions as `LATENCY_THRESHOLD_EXCEEDED`. Adding the plugin to the runner fixed the false positive and eliminated the console warning.
+
+**Double `buildSubgraphSchema` call eliminated in `runAutonomousQA`**
+`runAutonomousQA` previously called `buildSubgraphSchema` twice per invocation — once inline (lines 60-62) and again inside `buildQaServer()`. The inline call was dead code whose result was passed only to `generateQueries`; refactoring extracted `buildQaSchema()` as a shared helper eliminates the duplicate parse-and-validate cycle.
+
+**`test:watch` script added**
+`"test:watch": "jest --watch"` was added to `package.json` to provide the standard interactive watch-mode entry point for local development. Without it, developers ran bare `jest` which re-executes all 37 suites on every save.
+
+**External GraphQL API integration: Countries API**
+A typed service wrapper (`src/services/CountriesService.ts`) and MSW `graphql.link()` handlers (`tests/mocks/countries.handlers.ts`) were added to demonstrate and exercise the pattern for testing an external GraphQL API. The Countries test suite (`tests/integration/countries.graphql.test.ts`, `tests/performance/countries.load.test.ts`) covers 32 tests: basic query shape validation, all five filter operators (`eq`, `ne`, `in`, `nin`, `regex`), bonus currency consistency invariants (`Country.currency` ↔ `Country.currencies`), error propagation, and latency thresholds. All 32 tests are fully offline via MSW — no live network access required.
