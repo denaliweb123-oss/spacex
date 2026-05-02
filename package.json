@@ -30,6 +30,7 @@
     "test:contract": "jest tests/contract",
     "test:coverage": "jest tests/unit tests/integration --coverage",
     "test:perf": "jest tests/performance --runInBand",
+    "test:watch": "jest --watch",
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {
