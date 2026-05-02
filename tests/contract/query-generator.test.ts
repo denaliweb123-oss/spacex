@@ -33,7 +33,7 @@ describe("Autonomous query generation", () => {
     // launches returns Launch which has id, mission_name, launch_date_utc, etc.
     const launchesQuery = queries.find((q) => q.startsWith("{ launches"));
     expect(launchesQuery).toBeDefined();
-    const selectionCount = (launchesQuery!.match(/\b\w+\b/g) ?? [])
+    const selectionCount = ((launchesQuery ?? '').match(/\b\w+\b/g) ?? [])
       .filter((t) => !["launches", "limit", "offset", "find", "order", "sort"].includes(t)).length;
     expect(selectionCount).toBeGreaterThan(1);
   });

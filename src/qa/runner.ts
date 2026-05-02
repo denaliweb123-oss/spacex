@@ -47,7 +47,6 @@ export async function replayFailure(failure: CoverageFailure): Promise<string | 
 
   let detectAnomalyFn;
   try {
-    // @ts-ignore - handled by catch block for missing module
     const agent = await import("./agents/anomaly-agent");
     detectAnomalyFn = agent.detectAnomaly;
   } catch {
@@ -72,15 +71,13 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
   let recordFailureFn: (f: CoverageFailure) => void;
 
   try {
-    // @ts-ignore
     const fuzzAgent = await import("./agents/fuzz-agent");
     fuzzQueryFn = fuzzAgent.fuzzQuery;
   } catch {
-    fuzzQueryFn = (q) => [];
+    fuzzQueryFn = (_q) => [];
   }
 
   try {
-    // @ts-ignore
     const anomalyAgent = await import("./agents/anomaly-agent");
     detectAnomalyFn = anomalyAgent.detectAnomaly;
   } catch {
@@ -88,11 +85,10 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
   }
 
   try {
-    // @ts-ignore
     const coverageAgent = await import("./agents/coverage-agent");
     recordFailureFn = coverageAgent.recordFailure;
   } catch {
-    recordFailureFn = () => {};
+    recordFailureFn = (_f: CoverageFailure) => undefined;
   }
 
   let totalQueriesExecuted = 0;
