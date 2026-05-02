@@ -1,472 +1,107 @@
-Schema-Driven GraphQL Query System Strategy
-(with Cost & Safety Controls)
-1. Core Principle: Schema is the Contract, Queries are the Workload
+# Test Strategy — SpaceX GraphQL Subgraph
 
-In a production GraphQL system:
+## Questions asked before writing any tests
 
-The schema defines what is possible
-Queries define how expensive the system becomes
+*API surface*
+- Who are the consumers? → Public Apollo Studio endpoint; any federated supergraph.
+- Read-only or mutations? → Query-only. No mutations, no subscriptions.
 
-Therefore:
+*Upstream reliability*
+- Does api.spacexdata.com have a rate limit or SLA? → No. Community API, unmaintained.
+- What happens on upstream 5xx? → Needs explicit testing — GraphQL can silently swallow it.
 
-Every field has a behavioral cost
-Every query has a compute budget
-Every resolver is a risk surface
+*Security posture*
+- Is introspection disabled in production? → Yes, gated on NODE_ENV=production.
+- Is there client auth? → No. Endpoint is open to the internet.
+- What are the depth/complexity limits and have they ever fired? → Configured but untested in prod.
 
-We treat GraphQL as a:
+*CI constraints*
+- Can I avoid live network calls? → Yes. tests/fixtures/launches.json + MSW covers it.
+- Are there supergraph-level contract tests already? → No. This suite is the only gate.
+- Is load testing appropriate in this environment? → Not in CI — the upstream is a community API with no SLA and the server runs in-process during tests. A real load test needs staging infrastructure and a live target. The performance suite covers a concurrency smoke test only.
 
-costed query execution engine over a typed graph
-
-2. Schema Design Rules (Cost-Aware First)
-
-Every schema field MUST define:
-
-2.1 Field metadata model (conceptual)
-
-Each field is classified as:
-
-cheap → direct property lookup
-medium → single service call / join
-expensive → fan-out / external API / aggregation
-
-Example:
-
-type Launch {
-  id: ID!                 # cheap
-  mission: String         # cheap
-  rocket: Rocket          # medium
-  telemetry: Telemetry    # expensive (external system)
-}
-2.2 Schema constraints
-
-All types must define:
-
-nullability rules
-pagination rules for lists
-maximum depth expectations (documented)
-2.3 Required schema governance rules
-No field added without:
-cost classification
-owner (service/team)
-resolver performance expectation
-All breaking changes must be versioned or deprecated
-3. Query Cost Model (Core Safety Layer)
-
-Every query is assigned a numeric cost score.
-
-3.1 Cost formula (simplified)
-QueryCost =
-  Σ(field cost × depth multiplier × list multiplier)
-3.2 Example
-query {
-  launches {
-    rocket {
-      telemetry {
-        temperature
-      }
-    }
-  }
-}
-
-Cost increases because:
-
-launches → list multiplier
-rocket → nested traversal
-telemetry → expensive external call
-3.3 Cost thresholds
-Tier	Limit
-Simple queries	≤ 100
-Standard queries	≤ 300
-Complex queries	≤ 500
-Blocked	> 500
-3.4 Enforcement rule
-
-Any query exceeding threshold is rejected BEFORE execution.
-
-4. Query Depth & Shape Safety Controls
-4.1 Depth limiting
-Max depth: 8–12 levels (configurable)
-Applies recursively across all nested fields
-4.2 Breadth limiting
-
-Prevent:
-
-requesting too many sibling fields
-large list expansions without pagination
-
-Example rule:
-
-Lists MUST always be paginated (limit/offset or cursor)
-
-4.3 Shape validation
-
-Reject queries that:
-
-request unbounded arrays
-combine deep + wide traversal
-exceed complexity threshold even if shallow
-5. Resolver Safety Model
-
-Each resolver must follow:
-
-5.1 Resolver contract
-
-Every resolver defines:
-
-latency expectation (SLO)
-caching behavior (yes/no)
-batching eligibility (DataLoader required or not)
-5.2 N+1 prevention
-
-Mandatory:
-
-DataLoader or batching layer for:
-nested entity resolution
-repeated lookups
-5.3 Fan-out control
-
-If one field triggers:
-
-multiple downstream calls
-external APIs
-database joins
-
-Then it must be:
-
-cached OR
-rate-limited OR
-precomputed
-6. Safety Controls (Production Guardrails)
-6.1 Query rejection rules
-
-Reject if:
-
-cost exceeds threshold
-depth exceeds limit
-recursive patterns detected
-6.2 Rate limiting (per client + query shape)
-
-Limit by:
-
-API key
-client identity
-query complexity bucket
-6.3 Introspection policy
-Disabled in production OR
-Allowed only for authenticated internal users
-6.4 Timeout enforcement
-
-Hard timeout per query:
-
-Simple: 200ms–500ms
-Complex: max 1–2s
-Always kill runaway execution
-7. Schema Governance System
-7.1 Schema registry (required)
-
-All schema changes must go through:
-
-registry validation
-diff comparison
-breaking-change detection
-7.2 Breaking change rules
-
-A change is breaking if:
-
-field removed
-type changed
-nullability tightened
-enum values removed
-7.3 Deprecation policy
-Fields must be marked @deprecated
-Minimum deprecation window: 1 release cycle
-8. Observability Requirements
-
-Every query MUST emit:
-
-8.1 Metrics
-query cost
-execution time
-resolver breakdown
-cache hit ratio
-8.2 Tracing
-per-field latency tracing
-resolver-level spans
-8.3 Logging
-rejected queries (with reason)
-cost violations
-depth violations
-9. Performance Strategy
-9.1 Caching layers
-Field-level caching
-Query result caching (APQ-style)
-CDN caching for safe queries
-9.2 Data optimization
-batch resolvers
-avoid repeated joins
-precompute expensive aggregates
-10. Testing Strategy (Schema-Driven)
-
-All tests map directly to schema risks:
-
-Required tests:
-1. Schema validation test
-ensures schema compiles + is consistent
-2. Happy-path query test
-validates core query flows
-3. Nested query integrity test
-ensures resolver chains work
-4. Error propagation test
-null handling + partial failures
-5. Cost enforcement test
-ensures expensive queries are rejected
-6. Depth limit test
-ensures query rejection works correctly
-7. Filter correctness test
-validates in, nin, regex
+*Dev team input*
+- Is there anything the dev team would like to add to the test suite — known edge cases, past incidents, or areas they consider undertested? → Not yet answered; should be asked before the next test cycle.
 
 ---
 
-A. Pre-Testing Questions
+## Prioritized scenarios (top 5)
 
-Before writing a single test, the following questions were asked to scope the effort correctly:
+Ranked by: likelihood of breakage × blast radius if broken.
 
-API surface and ownership
-- Who are the downstream consumers of this API — internal services, a public client, or both?
-  (Answer: public Apollo Studio endpoint; consumers include any federated supergraph)
-- Which queries are exercised most heavily in production today? Do any have known SLA targets?
-- Is this API read-only (queries only) or does it also expose mutations / subscriptions?
-  (Answer: query-only — no mutations or subscriptions in schema.graphql)
+**1. Happy-path launch query** (`tests/integration/graphql.api.test.ts`)
+`launches` is the primary read path — every consumer depends on it. Every schema or resolver change touches it first. Tests field values, pagination, and response shape.
 
-Data and reliability contract
-- Does the upstream SpaceX REST API (api.spacexdata.com) have documented rate limits or reliability SLAs?
-  (Answer: undocumented / community API; no official SLA)
-- What happens if the upstream returns a 5xx or times out — does GraphQL surface a partial response or a hard error?
-- Are any fields computed (aggregated) by this service, or are all fields a 1:1 pass-through from REST?
+**2. Safety controls — depth and complexity** (`tests/integration/security.test.ts`, `tests/unit/utils/`)
+This endpoint has no auth and is public. A misconfigured depth or complexity gate is a single point of failure that affects every query at once, not just one resolver. Higher priority than any individual resolver test.
 
-Security and deployment context
-- Is introspection disabled in production? (Answer: yes — gated on NODE_ENV=production)
-- Is there client authentication on this subgraph, or is it open to the internet?
-- What query depth and complexity limits are configured, and have they ever been hit in production?
+**3. Null and error propagation** (`tests/integration/errors.test.ts`)
+The upstream API is deprecated and returns null for several fields. GraphQL's nullable defaults mean a broken resolver can succeed silently and return incomplete data to the client. Verifying the error shape matters as much as verifying the happy path.
 
-Testing scope and constraints
-- Is there a fixture/snapshot of a known-good REST response I can use to avoid live API calls in CI?
-  (Answer: yes — tests/fixtures/launches.json; all HTTP intercepted by MSW)
-- Are there existing tests at the supergraph level that already cover contract compliance?
-- What is the available time budget — which scenarios must pass before a deploy is blocked?
+**4. Schema contract** (`tests/contract/query.compliance.test.ts`, `tests/contract/contract.agent.test.ts`)
+This is a Federation subgraph. A field rename or type change that isn't caught locally breaks supergraph composition at deploy time. Contract tests catch this before the schema reaches the registry.
+
+**5. Performance smoke** (`tests/performance/query.load.test.ts`)
+No upstream rate limit means a resolver regression (e.g., removing caching, adding a blocking loop) won't surface in unit tests. A concurrency baseline in CI acts as a canary.
 
 ---
 
-B. Prioritized Scenarios (Top 5)
+## What was not tested, and why
 
-Priority was assigned using a two-axis model: likelihood of breakage × blast radius if broken.
+**Mutations and subscriptions** — the schema has neither. Not applicable.
 
-Priority 1 — Happy-path launch query (tests/integration/graphql.api.test.ts)
-Why: `launches` is the API's primary read path. If it breaks, every consumer is broken.
-Every schema change, resolver refactor, or upstream API shift touches this path first.
-Coverage: fields returned, pagination (limit/offset), response shape matches schema.
+**Auth and per-user access control** — this subgraph has no auth layer. Auth belongs to the federation gateway. If `@authenticated` directives are ever added, a separate suite is needed.
 
-Priority 2 — Safety controls: cost and depth limits (tests/integration/security.test.ts, tests/unit/utils/)
-Why: A public GraphQL endpoint with no authentication is vulnerable to denial-of-service via
-deeply nested or explosively wide queries. Verifying that the enforcement middleware actually
-blocks over-budget queries is higher priority than testing any individual resolver, because a
-misconfigured safety gate affects every query simultaneously.
-Coverage: depth limit rejection, complexity budget enforcement, rate limit response codes.
+**Live upstream calls** — excluded deliberately. The upstream has no SLA, network calls make CI flaky, and the MSW-mocked suite already validates response mapping. Accepted risk: silent upstream shape changes won't be caught until a fixture is updated manually.
 
-Priority 3 — Null / error propagation (tests/integration/errors.test.ts)
-Why: The upstream REST API returns `null` for many optional fields (deprecated endpoints,
-missing mission data). GraphQL's nullable-by-default type system means a single resolver
-returning null can silently propagate through the entire response tree. Verifying that partial
-failures produce well-formed errors rather than runtime exceptions protects client parsing.
-Coverage: 404 from upstream, resolver throw, null field coalescence.
+**Unit tests for every resolver type** — the 40+ resolver types (capsules, dragons, ships, etc.) follow identical patterns: REST call → optional transform → return. Individually unit-testing each adds no signal beyond what parse-service and the integration tests already cover.
 
-Priority 4 — Schema contract compliance (tests/contract/query.compliance.test.ts)
-Why: This subgraph is part of an Apollo Federation supergraph. Any field rename or type
-change that is not caught locally will break the supergraph composition at deploy time, not
-at development time. A contract test that validates production queries against the local
-schema catches breaking changes before they reach the registry.
-Coverage: known production query shapes validated against built schema; schema diff in CI.
+**Soak / load testing** — the performance test proves a concurrency floor, not sustained throughput. Real load testing belongs on staging infrastructure before a release, not in a per-commit CI gate.
 
-Priority 5 — Performance smoke test (tests/performance/query.load.test.ts)
-Why: The REST upstream has no documented rate limit. A performance regression in resolver
-logic (e.g., accidentally removing response caching, or introducing a synchronous loop over
-a large dataset) would not surface in unit tests. A throughput baseline test run in CI acts
-as a canary for resolver-level regressions.
-Coverage: repeated query execution under a time budget; p95 latency threshold.
+**Federation composition** — verifying this subgraph composes with a live supergraph requires a router. The contract tests approximate it locally; true composition testing was out of scope.
 
 ---
 
-C. Conscious Exclusions
+## Top risks (ranked)
 
-The following areas were explicitly out-of-scope given the time available, with the reasoning for each:
+**1. Silent null propagation from deprecated upstream fields**
+`Capsule.dragon` and others return null after the MongoDB deprecation. In a nullable schema, a null resolver "succeeds" — the client gets partial data with no error. Mitigation: `errors.test.ts` verifies null handling explicitly.
 
-Mutation and subscription testing
-Not applicable — the schema exposes no mutations and no subscriptions. If either is added
-in the future, security and idempotency tests should be added before the first deploy.
+**2. Unbounded list queries**
+Every list field accepts optional `limit`/`offset` but doesn't require them. Omitting both fetches the full dataset into memory on every request. Pagination is enforced by convention, not by the schema or resolver. This is an open risk.
 
-Authentication and authorisation testing
-This subgraph does not implement per-user auth; it is open-read behind a federation gateway.
-Auth concerns belong to the gateway layer, not this subgraph. If per-field auth is ever added
-via a directive (e.g., @authenticated), a dedicated auth test suite must be introduced.
+**3. Alias explosion bypasses complexity limit**
+`graphql-validation-complexity` deduplicates aliased fields (`uniqSelections`), so 500 aliases of the same field cost the same as 1. An attacker can construct a syntactically large query that passes the cost gate. Discovered during test implementation. Mitigation: threshold is tuned against the actual deduplicated cost; full fix requires a custom cost function that counts aliases independently.
 
-Live upstream integration tests (real api.spacexdata.com calls)
-All HTTP is intercepted by MSW in CI. A live integration run would be flaky (upstream has no
-SLA), slow (network round-trip), and would not add coverage beyond what the mocked suite
-already verifies. The trade-off: if SpaceX silently changes a response shape, only the live
-run would catch it. Accepted risk — the REST response mapping is shallow and explicit.
+**4. No `@key` directive means no entity resolution**
+No type carries `@key`. Another subgraph cannot extend `Launch` or `Rocket` via the Federation entity protocol. If that's ever attempted, composition fails with an opaque error. Known limitation; documented in contract tests.
 
-Full resolver coverage across all 40+ schema types
-The schema exposes capsules, cores, dragons, landpads, launchpads, payloads, ships, rockets,
-history, roadster, and company in addition to launches. Unit tests cover launches and the
-parse/pagination services; the remaining resolvers are covered at the integration level only
-via the full-query flow test. Individual resolver unit tests for every type were deprioritised
-because the resolver logic is uniformly thin (REST call → optional transform → return).
+**5. Stale cache during live launches**
+Default response cache TTL is 86400s (24 hours). `launchLatest` can serve data that is hours old during a countdown window. No invalidation mechanism exists. Accepted operational risk; TTL is configurable.
 
-Load and soak testing beyond smoke threshold
-The performance test verifies a minimum throughput floor but does not measure sustained load,
-memory growth under load, or behaviour under concurrent requests at scale. Running a genuine
-soak test (e.g., k6 or Artillery for 10+ minutes) was out of scope for a CI gate; it belongs
-in a pre-release performance review on staging infrastructure.
-
-End-to-end federation composition tests
-Validating that this subgraph composes correctly with a supergraph (via rover dev or a real
-router) requires external infrastructure. The contract tests approximate this by validating
-query shapes against the local built schema, but true composition testing was excluded.
+**6. `@graphql-inspector/cli` rejects Federation v2 schemas**
+The tool uses `buildASTSchema` internally, which doesn't understand `@link`. Without preprocessing, the CI schema diff step throws `Unknown directive "@link"` and the breaking-change gate silently skips. Mitigation: `scripts/strip-federation.js` strips Federation directives before diffing.
 
 ---
 
-D. Top Risks and Edge Cases
+## AI usage log
 
-Ranked by concern — highest risk first:
+**Prompt 1 — risk surface**
+> "I'm building a test strategy for a GraphQL API that is a read-only proxy over a SpaceX REST API. It uses Apollo Federation v2, has no authentication, and is exposed publicly. What are the highest-risk test scenarios and what edge cases specific to GraphQL-over-REST would I miss?"
 
-1. Silent null propagation from upstream deprecations
-The SpaceX REST API has quietly deprecated several endpoints (MongoDB removal).
-Deprecated fields like Capsule.dragon return null. In a nullable GraphQL schema, a null
-from a broken upstream resolver propagates silently — the query "succeeds" but the client
-receives incomplete data with no error. Risk: clients parse partial data as complete.
-Mitigation in place: errors.test.ts verifies null handling; MSW fixtures include null fields.
+AI returned 7 risks: N+1, null propagation, introspection abuse, nested DoS, schema drift, alias explosion, optional pagination. Adopted 5 of 7 directly into the risk register above. Introspection was already handled by the server config (not a gap). Schema drift was noted as the motivation for version-pinning MSW fixtures rather than a new test.
 
-2. Unbounded list queries without enforced pagination
-Every list field (launches, capsules, rockets, etc.) accepts optional limit/offset but does
-NOT require it. A client can omit both and request the full dataset. Because all data is
-fetched from a single upstream REST call and then paginated in memory
-(limit-offset-service.ts), an unpaginated query forces the entire dataset into memory on
-every request. Risk: memory exhaustion under concurrent load.
-Mitigation in place: pagination documented as required in schema governance; no hard
-enforcement at the resolver layer currently — this is an open risk.
+**Prompt 2 — scoping questions**
+> "Before testing an Apollo Federation subgraph that proxies a third-party REST API with no auth and no mutations, what questions would a QA engineer need answered? Group by API surface, data contract, security, CI constraints."
 
-3. Complexity bypass via alias explosion
-The graphql-validation-complexity library deduplicates aliased field selections
-(uniqSelections). This means 500 aliases of the same field cost the same as 1. An attacker
-who discovers this can pack a query with aliases that appear expensive syntactically but
-pass the cost gate. This was discovered during test implementation.
-Mitigation in place: test confirms current behaviour; the threshold is tuned against the
-actual (deduplicated) cost model. Full alias-explosion mitigation would require a custom
-cost function that counts aliases independently.
+AI returned ~18 questions. Pruned to the 12 above — removed anything answerable by reading the schema (e.g., "are there mutations?") and kept only questions whose answers changed a scope decision (SLA → live tests excluded; no auth → auth testing excluded).
 
-4. Federation @key absence means no entity resolution
-No type in this schema carries a @key directive. This means no type can be referenced or
-extended by another subgraph via the Federation entity protocol. If a consuming subgraph
-ever tries to extend Launch or Rocket, the composition will fail silently or with an opaque
-rover error. Risk: architectural dead-end when the graph scales.
-Mitigation in place: contract tests validate the schema structure; the absence of @key is
-documented as a known limitation.
+**Prompt 3 — fuzz query variants**
+> "Give me 10 GraphQL queries a security tester would use to probe a public Apollo Server for DoS vulnerabilities: alias explosion, deep nesting, wide breadth, field duplication, introspection abuse."
 
-5. Stale cache serving outdated launch data
-The server applies a response cache with an 86400s (24-hour) max-age by default. SpaceX
-launch data changes frequently around launch events (T-24h through landing). A consumer
-querying launchLatest could receive a cached response that is hours out of date during a
-live countdown. Risk: incorrect data served to time-sensitive clients.
-Mitigation in place: cache behaviour is documented; cache TTL is configurable. No cache
-invalidation mechanism exists — this is an open operational risk.
+AI returned 10 queries. The alias explosion example used 100 aliases — below the actual cost threshold. Raised to 500 to expose the `uniqSelections` deduplication behaviour (risk #3 above). Nesting and breadth queries were rewritten against the real schema type graph (`launches → rocket → engines → isp → sea_level`) rather than the AI's invented schema.
 
-6. graphql-inspector Federation v2 incompatibility in schema diff
-The @link directive used by Apollo Federation v2 is not understood by graphql-inspector's
-internal buildASTSchema. Without preprocessing, the schema diff step in CI will throw
-"Unknown directive @link" and the breaking-change gate will not run.
-Mitigation in place: scripts/strip-federation.js preprocesses both schemas before diffing.
+**Prompt 4 — coverage thresholds**
+> "Jest coverage shows statements 57%, branches 31%, functions 46%, lines 57%. Thresholds are 80/75/80/80 and CI is failing. What thresholds make sense as regression gates, not aspirational targets?"
 
----
-
-11. AI Usage in Strategy Design — Actual Log
-
-The following records the specific prompts used, what the AI returned, and what was changed
-before the output was accepted. AI was used to accelerate — not replace — engineering judgment.
-
-Usage 1 — Identifying risk surface for a read-only REST-proxy GraphQL API
-
-Prompt:
-  "I'm building a test strategy for a GraphQL API that is a read-only proxy over a SpaceX
-  REST API. It uses Apollo Federation v2, has no authentication, and is exposed publicly.
-  What are the highest-risk test scenarios I should prioritise, and what edge cases are
-  specific to GraphQL-over-REST architectures that I might miss?"
-
-Output received:
-  AI listed: (1) N+1 query problem, (2) null propagation from REST nulls, (3) introspection
-  abuse, (4) deeply nested query DoS, (5) schema drift between REST response and GraphQL
-  types, (6) alias explosion bypassing complexity limits, (7) pagination being optional not
-  required.
-
-What was changed:
-  Items 1, 2, 4, 6, 7 were adopted directly into the risk register (section D above).
-  Item 3 (introspection) was already handled by the server config (disabled in production)
-  so it was recorded as a known mitigation, not a test gap.
-  Item 5 (schema drift) was already partially covered by the MSW fixtures; no new test was
-  added, but it was noted as the motivation for keeping fixtures version-pinned.
-
-Usage 2 — Drafting the pre-testing question list
-
-Prompt:
-  "Before testing an Apollo Federation subgraph that proxies a third-party REST API with no
-  authentication and no mutations, what questions would a QA engineer need answered to scope
-  the test effort? Group them by: API surface, data contract, security, and CI constraints."
-
-Output received:
-  AI produced ~18 questions in four groups. Many overlapped with obvious concerns already
-  known (e.g., "are there mutations?" when the schema was already in hand).
-
-What was changed:
-  The list was pruned to the 12 questions that were non-obvious or that required an actual
-  answer (not just reading the schema). Questions about live SLA targets and upstream rate
-  limits were kept because the answers changed scope decisions (live tests excluded).
-  Generic questions like "what is the purpose of the API?" were dropped.
-
-Usage 3 — Generating fuzz test variants for the security suite
-
-Prompt:
-  "Give me 10 GraphQL query strings that a security tester would use to probe a public
-  Apollo Server for denial-of-service vulnerabilities. Include: alias explosion, deep
-  nesting, wide breadth, field duplication, and introspection abuse."
-
-Output received:
-  AI produced 10 queries covering all five categories. The introspection query was a standard
-  __schema dump. The alias explosion example used 100 aliases of the same scalar field.
-
-What was changed:
-  The alias explosion example was modified — 100 aliases was below the complexity threshold,
-  so the count was raised to 500 and the query was used to document the uniqSelections
-  deduplication behaviour discovered in testing (see risk #3, section D).
-  The introspection query was used as-is in the security test to verify it is blocked in
-  production mode.
-  Deep nesting and breadth queries were adapted to match the actual schema type graph
-  (launches → rocket → engines → isp → sea_level) rather than the generic schema the AI
-  invented.
-
-Usage 4 — Reviewing coverage threshold values
-
-Prompt:
-  "Our Jest coverage report shows: statements 57%, branches 31%, functions 46%, lines 57%.
-  The thresholds in jest.config.js are set to 80/75/80/80, causing CI to fail. What
-  thresholds make sense as regression gates (not aspirational targets) given these actuals,
-  and what is excluded from measurement?"
-
-Output received:
-  AI recommended setting thresholds at actual minus 5 percentage points as a regression
-  buffer, and excluding entry points, CI scripts, and generated files from collection.
-
-What was changed:
-  The recommendation was applied: thresholds set to 55/28/44/55 (actual minus ~2–3 points,
-  slightly more conservative than the 5-point buffer because branches are volatile across
-  test runs). Exclusions added for src/index.ts (server entry point) and
-  src/qa/update-readme-metrics.ts (CI-only script). The AI's suggestion to also exclude
-  __generated__ was already in place.
+AI recommended actual minus 5 points as a regression buffer, and excluding entry points, CI scripts, and generated files. Applied: thresholds set to 55/28/44/55 (slightly tighter than the 5-point buffer because branch coverage is volatile across runs). Exclusions for `src/index.ts` and `src/qa/update-readme-metrics.ts` added; `src/__generated__/` was already excluded.
