@@ -32,3 +32,6 @@ generated-schema.graphql
 
 undefined.json
 target.list
+
+# Intermediate files written by readme:update
+.jest-results.json
