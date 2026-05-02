@@ -8,6 +8,7 @@ import API from "../api";
 
 import { generateQueries } from "./generators/query-generator";
 import type { CoverageFailure } from "./agents/coverage-agent";
+import { generateCIReport } from "./agents/coverage-agent";
 
 export interface AutonomousQaMetrics {
   totalQueriesExecuted: number;
@@ -21,6 +22,8 @@ export interface AutonomousQaMetrics {
 
 export interface AutonomousQaOptions {
   writeMetrics?: boolean;
+  /** Emit a structured CI anomaly report to stdout at the end of the run (default: false). */
+  printReport?: boolean;
 }
 
 function buildQaSchema() {
@@ -147,6 +150,11 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
   }
 
   await server.stop();
+
+  // Emit structured CI report when explicitly requested (not during normal test runs).
+  if (options.printReport ?? false) {
+    console.info('\n' + generateCIReport(anomalies) + '\n');
+  }
 
   const metrics = {
     totalQueriesExecuted,

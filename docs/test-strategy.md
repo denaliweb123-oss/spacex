@@ -37,7 +37,7 @@
 
 5. **Performance** — Concurrency floors validated in-process. SpaceX: 3 concurrent `launchesPast` queries complete under 2000 ms; 10 concurrent queries are all error-free. Countries (local only): single full-schema query with nested fields under 500 ms; 250-country dataset under 1000 ms; 10 concurrent requests under 2000 ms.
 
-6. **Autonomous QA** — Schema-derived queries generated at runtime, fuzzed with adversarial variants, executed against an in-process server. Any response exceeding 1500 ms (MEDIUM) or containing unexpected errors (HIGH) is flagged. Failures persisted to `qa-memory.json` and replayed on every subsequent run until resolved. Zero high-severity anomalies required to pass CI.
+6. **Autonomous QA** — Schema-derived queries generated at runtime using domain-aware fixture seeds (real launch IDs from `tests/fixtures/launches.json` substitute `"qa-fixture-id"` for resolvers with fixture coverage, so the happy-path resolver branch is exercised rather than always returning `null`). Queries are fuzzed with adversarial variants and executed against an in-process server. Any response exceeding the latency threshold (MEDIUM) or containing unexpected errors (HIGH) is flagged. Failures carry an optional `knownLimitation` field — when set, they are separated from real anomalies in the CI report and do not block the gate. Failures are persisted to `qa-memory.json` and replayed on every subsequent run until resolved. At the end of each run, `generateCIReport()` groups real failures by resolver name (so 5 failures from the same broken resolver surface as one root cause, not 5 independent anomalies) and separates documented known limitations. The `printReport: true` option enables this output; it defaults to `false` to keep test runs clean. Zero high-severity anomalies required to pass CI.
 
 ---
 
@@ -169,6 +169,33 @@ The QA runner's `buildQaServer()` was not passing `ApolloServerPluginInlineTrace
 
 **External GraphQL API integration: Countries API**
 A typed service wrapper (`src/services/CountriesService.ts`) and MSW `graphql.link()` handlers (`tests/mocks/countries.handlers.ts`) were added to demonstrate and exercise the pattern for testing an external GraphQL API. The Countries test suite (`tests/integration/countries.graphql.test.ts`, `tests/performance/countries.load.test.ts`) covers 32 tests: basic query shape validation, all five filter operators (`eq`, `ne`, `in`, `nin`, `regex`), bonus currency consistency invariants (`Country.currency` ↔ `Country.currencies`), error propagation, and latency thresholds. All 32 tests are fully offline via MSW — no live network access required.
+
+**Contract coverage expanded: 1 query → 37 (all root Query fields)**
+`query.compliance.test.ts` previously validated a single production query (`GetLaunches`). The file was rewritten to cover all 37 root Query fields via `parse + validate` (no execution, no mocks). Grouped into five sections: list resolvers (16), single-item resolvers (12), singleton resolvers (2), result-envelope resolvers (4), deprecated resolvers (3). Each test catches field renames, type changes, or removals that would break a production query shape before the schema reaches the registry.
+
+**Schema diff added as a Jest test (`tests/contract/schema.diff.test.ts`)**
+Previously, breaking-change detection ran only as a CLI step in CI (`graphql-inspector diff`). A Jest test was added that (1) snapshots the SDL — any schema change fails until `--updateSnapshot` is run deliberately, and (2) diffs the current schema against `origin/main` using `@graphql-inspector/core`, failing on any `BREAKING` change. Skips gracefully when `origin/main` is unavailable (offline, fresh clone). Mirrors the CI CLI step so the gate runs locally too.
+
+**Self-healing compliance script (`scripts/heal-compliance.ts`, `npm run schema:heal`)**
+A ts-node script that regenerates `tests/contract/query.compliance.test.ts` from the current schema using `generateQueries()`. Run after a breaking schema change to restore a passing baseline, then review and re-add field-value assertions for priority resolvers before committing.
+
+**Domain seeds: query generator uses real fixture IDs**
+`src/qa/generators/domain-seeds.ts` reads `tests/fixtures/launches.json` at module load and exports `DOMAIN_SEEDS = { launch: "<real-id>" }`. `buildArgumentList` in `query-generator.ts` substitutes the real launch ID for the `id` argument of the `launch` resolver instead of `"qa-fixture-id"`. This causes the autonomous QA suite to exercise the happy-path resolver branch (actual data returned) rather than always hitting the null/404 branch. Other single-item resolvers (no fixture data) fall back to `"qa-fixture-id"` unchanged.
+
+**Failure clustering and CI report in coverage agent**
+Three new exports added to `coverage-agent.ts`: `extractResolver(field)` parses the resolver name from a query string; `clusterFailures(failures)` groups by resolver so 5 failures from one broken resolver surface as one root cause; `generateCIReport(failures)` produces a structured table separating real failures (grouped by resolver with HIGH/MEDIUM counts) from `knownLimitation` entries. The runner emits this report when `runAutonomousQA({ printReport: true })` is passed; defaults to `false` to keep test run output clean.
+
+**Known-limitation metadata in `CoverageFailure`**
+`CoverageFailure` gained an optional `knownLimitation?: string` field. When set, `recordFailure` emits `console.warn` instead of `console.error`, and `generateCIReport` moves the entry to an "ℹ️ Known limitations — not blocking CI" section separate from real anomalies.
+
+**N+1 coverage extended to ships**
+`nplusone.test.ts` previously had one test: rockets across launches (memoized — 3 launches × 1 rocket = 1 API call). A second test was added for ships, which have no memoization: 3 launches × 1 ship each = 3 `getShip` calls. The test documents the open N+1 risk for ships and acts as a regression gate — if a cache is added, the assertion changes to 1.
+
+**E2E test value assertions added**
+`tests/e2e/full.graphql.flow.test.ts` previously asserted only `data.launches` is an Array (shape-only). Added: `first.mission_name === "FalconSat"`, `first.launch_year === "2006"`, and `first.id` is a non-empty string — pinned against the MSW fixture.
+
+**CLAUDE.md file path references corrected**
+Five stale paths in the Testing section were corrected to match the actual file locations under `tests/`.
 
 ---
 
