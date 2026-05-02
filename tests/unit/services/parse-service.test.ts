@@ -1,4 +1,4 @@
-import { parseShip, parseLaunchpad, parseMissions, parsePayloadObj } from "../../../src/parse-service";
+import { parseShip, parseLaunchpad, parseMissions, parsePayloadObj, parsePayloads, parsePayload } from "../../../src/parse-service";
 
 describe("parseShip", () => {
   it("maps ship_id → id, ship_name → name, ship_type → type", () => {
@@ -48,5 +48,76 @@ describe("parsePayloadObj", () => {
 
   it("falls back to payload_id when id is absent", () => {
     expect(parsePayloadObj({ payload_id: "PL2" }).id).toBe("PL2");
+  });
+});
+
+// Helper: build a launch object with payloads nested at rocket.second_stage.payloads
+function makeLaunch(...payloads: object[]) {
+  return { rocket: { second_stage: { payloads } } };
+}
+
+describe("parsePayloads", () => {
+  it("returns all payloads when query is empty", () => {
+    const launches = [makeLaunch({ id: "p1" }, { id: "p2" })];
+    expect(parsePayloads(launches, {})).toHaveLength(2);
+  });
+
+  it("returns an empty array when data has no launches", () => {
+    expect(parsePayloads([], {})).toHaveLength(0);
+  });
+
+  it("skips launches with no rocket.second_stage.payloads", () => {
+    const launches = [{ rocket: null }, { rocket: { second_stage: null } }];
+    expect(parsePayloads(launches, {})).toHaveLength(0);
+  });
+
+  it("filters payloads to those matching all query fields", () => {
+    const launches = [
+      makeLaunch(
+        { id: "p1", nationality: "USA", orbit: "LEO" },
+        { id: "p2", nationality: "USA", orbit: "GTO" },
+        { id: "p3", nationality: "ESA", orbit: "LEO" },
+      ),
+    ];
+    const result = parsePayloads(launches, { nationality: "USA", orbit: "LEO" });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("p1");
+  });
+
+  it("excludes payloads that partially match the query", () => {
+    const launches = [makeLaunch({ id: "p1", nationality: "USA", orbit: "GTO" })];
+    const result = parsePayloads(launches, { nationality: "USA", orbit: "LEO" });
+    expect(result).toHaveLength(0);
+  });
+
+  it("accumulates payloads across multiple launches", () => {
+    const launches = [
+      makeLaunch({ id: "p1" }),
+      makeLaunch({ id: "p2" }),
+    ];
+    expect(parsePayloads(launches, {})).toHaveLength(2);
+  });
+});
+
+describe("parsePayload", () => {
+  it("returns null when launch is null", () => {
+    expect(parsePayload(null, "p1")).toBeNull();
+  });
+
+  it("returns the payload matching payload_id at index 0", () => {
+    const launch = makeLaunch({ id: "p1", type: "Satellite" }, { id: "p2" });
+    expect(parsePayload(launch, "p1").id).toBe("p1");
+  });
+
+  it("returns the correct payload when the match is not at index 0", () => {
+    const launch = makeLaunch({ id: "p1" }, { id: "p2", type: "Dragon" }, { id: "p3" });
+    const result = parsePayload(launch, "p2");
+    expect(result.id).toBe("p2");
+    expect(result.type).toBe("Dragon");
+  });
+
+  it("falls back to payload_id field when id is absent", () => {
+    const launch = makeLaunch({ payload_id: "legacy-1", type: "Crew" });
+    expect(parsePayload(launch, "legacy-1").id).toBe("legacy-1");
   });
 });

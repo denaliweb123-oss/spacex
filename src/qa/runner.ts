@@ -87,8 +87,6 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
       });
 
       if (anomaly) {
-        console.log(anomaly, q);
-
         const severity =
           anomaly.includes("LATENCY_THRESHOLD_EXCEEDED")
             ? "MEDIUM"
@@ -120,7 +118,7 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
     mediumSeverityAnomalies,
     lastRun: new Date().toISOString(),
   };
-  if (options.writeMetrics ?? true) {
+  if (options.writeMetrics ?? false) {
     writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
   }
 

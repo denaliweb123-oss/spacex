@@ -1,4 +1,11 @@
 {
-  "slowQueries": [],
+  "slowQueries": [
+    {
+      "timestamp": "2026-05-02T01:21:01.216Z",
+      "field": "{ capsule(id: \"qa-fixture-id\") { id landings original_launch reuse_count status } }",
+      "reason": "⚠️ ANOMALY: LATENCY_THRESHOLD_EXCEEDED",
+      "severity": "MEDIUM"
+    }
+  ],
   "failingQueries": []
 }

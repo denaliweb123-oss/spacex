@@ -5,7 +5,10 @@
       "Bash(node scripts/strip-federation.js schema.graphql /tmp/schema_test_stripped.graphql)",
       "Read(//tmp/**)",
       "Bash(npx @graphql-inspector/cli diff /tmp/schema_test_stripped.graphql /tmp/schema_test_stripped.graphql)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(sed -n '25,32p' /Users/zory/spacex/schema.graphql)",
+      "Bash(sed -n '610,628p' /Users/zory/spacex/schema.graphql)",
+      "Bash(awk '/^type Ship/,/^}/' /Users/zory/spacex/schema.graphql)"
     ]
   }
 }

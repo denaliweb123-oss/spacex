@@ -27,12 +27,4 @@ const resolvers: Resolvers = {
     },
   },
 };
-const parseCapsules = (capsule: any) => ({
-  ...capsule,
-  // id: capsule.capsule_serial,
-  launches:
-    capsule.launches && capsule.launches.length > 0
-      ? capsule.launches[0]
-      : undefined,
-});
 export { resolvers };

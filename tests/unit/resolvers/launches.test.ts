@@ -201,3 +201,138 @@ describe("Launches — Field Resolver Mappings (REST v4 → GraphQL)", () => {
     expect((res.body as any).singleResult.data.launches[0].links).toBeNull();
   });
 });
+
+describe('Launches — launchesPastResult resolver', () => {
+  it('returns data and totalCount when queryNextLaunch returns results', async () => {
+    const api = mockApi();
+    api.queryNextLaunch.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launchesPastResult { result { totalCount } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launchesPastResult.result.totalCount).toBe(1);
+  });
+
+  it('returns totalCount 0 when queryNextLaunch returns null', async () => {
+    const api = mockApi();
+    api.queryNextLaunch.mockResolvedValue(null as any);
+    const res = await server.executeOperation(
+      { query: `{ launchesPastResult { result { totalCount } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launchesPastResult.result.totalCount).toBe(0);
+  });
+});
+
+describe('Launch — field resolvers (branch coverage)', () => {
+  it('maps launch_date_local from REST date_local', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { launch_date_local } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].launch_date_local).toBe(RAW_LAUNCH.date_local);
+  });
+
+  it('maps launch_success from REST launch_success', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { launch_success } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].launch_success).toBe(true);
+  });
+
+  it('maps mission_id as array containing id', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { mission_id } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].mission_id).toEqual(['abc123']);
+  });
+
+  it('returns null telemetry when not present', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { telemetry { flight_club } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].telemetry).toBeNull();
+  });
+
+  it('returns upcoming flag from REST payload', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { upcoming } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].upcoming).toBe(false);
+  });
+
+  it('resolves rocket name when rocket field is a string id', async () => {
+    const api = mockApi();
+    const launchWithStringRocket = { ...RAW_LAUNCH, rocket: 'falcon9' };
+    api.getLaunch.mockResolvedValue(launchWithStringRocket as any);
+    api.getRocket.mockResolvedValue({ id: 'falcon9', name: 'Falcon 9', type: 'rocket' } as any);
+    const res = await server.executeOperation(
+      { query: `{ launch(id: "abc123") { rocket { rocket_name } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launch.rocket.rocket_name).toBe('Falcon 9');
+  });
+
+  it('returns null rocket_name when rocket string id resolves to null', async () => {
+    const api = mockApi();
+    const launchWithStringRocket = { ...RAW_LAUNCH, rocket: 'unknown' };
+    api.getLaunch.mockResolvedValue(launchWithStringRocket as any);
+    api.getRocket.mockResolvedValue(null as any);
+    const res = await server.executeOperation(
+      { query: `{ launch(id: "abc123") { rocket { rocket_name } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launch.rocket.rocket_name).toBeNull();
+  });
+
+  it('returns rocket object directly when rocket field is not a string', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([RAW_LAUNCH] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { rocket { rocket_name } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launches[0].rocket.rocket_name).toBe('Falcon 9');
+  });
+
+  it('returns null ships when parent has no ships array', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([{ ...RAW_LAUNCH, ships: null }] as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { ships { id } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.data.launches[0].ships).toBeNull();
+  });
+
+  it('resolves each ship by id when parent.ships is populated', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([{ ...RAW_LAUNCH, ships: [{ ship_id: 'S1' }] }] as any);
+    api.getShip.mockResolvedValue({ ship_id: 'S1', ship_name: 'GO Ms Tree' } as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { ships { name } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect((res.body as any).singleResult.data.launches[0].ships[0].name).toBe('GO Ms Tree');
+  });
+});
