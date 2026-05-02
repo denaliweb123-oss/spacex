@@ -47,6 +47,14 @@ describe("🤖 Autonomous GraphQL QA System", () => {
     expect(metrics.highSeverityAnomalies).toBe(0);
     expect(metrics.anomalies.filter((anomaly) => anomaly.severity === "HIGH")).toEqual([]);
   }, 30000);
+
+  it("generates a query for every resolver field with no uncovered gaps", async () => {
+    const metrics = await runAutonomousQA({ writeMetrics: false });
+
+    // skippedResolverFields are recorded when a type has no selectable scalar subfields.
+    // If this list grows, add fixture scalar fields or document the skip explicitly.
+    expect(metrics.skippedResolverFields).toEqual([]);
+  }, 30000);
 });
 
 describe("Autonomous failure memory replay", () => {

@@ -5,7 +5,7 @@ const resolvers: Resolvers = {
   Query: {
     dragons: async (obj, { limit, offset }, context) => {
       const dragons = await context.api.getDragons();
-      return applyLimitOffset({ data: dragons, limit, offset });
+      return applyLimitOffset({ data: dragons, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     dragon: (obj, { id }, context) => {
       return context.api.getDragon(id);

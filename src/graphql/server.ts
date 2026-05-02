@@ -26,21 +26,10 @@ function productionPlugins(): ApolloServerPlugin<DataSourceContext>[] {
   return [
     ApolloServerPluginCacheControl({ defaultMaxAge: 86400 }),
     responseCachePlugin({
-      shouldWriteToCache: async (requestContext) => {
-        if (
-          requestContext.operationName !== "IntrospectionQuery" &&
-          !requestContext.operationName?.toLowerCase().includes("introspection")
-        ) {
-          console.log(
-            `Hash: ${requestContext.queryHash}\n\tAge: ${
-              requestContext.overallCachePolicy.maxAge
-            }\n\tOperation: ${
-              (requestContext.source ?? "").replace(/\n/g, "").replace(/\t/g, "")
-            }\n\tVariables: ${JSON.stringify(requestContext.request.variables)}`
-          );
-        }
-        return false;
-      },
+      shouldWriteToCache: async (requestContext) =>
+        (requestContext.overallCachePolicy.maxAge ?? 0) > 0 &&
+        requestContext.operationName !== "IntrospectionQuery" &&
+        !requestContext.operationName?.toLowerCase().includes("introspection"),
     }),
     {
       async serverWillStart() {

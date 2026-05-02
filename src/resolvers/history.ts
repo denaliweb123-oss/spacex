@@ -5,7 +5,7 @@ const resolvers: Resolvers = {
   Query: {
     histories: async (obj, { find, offset, order, sort, limit }, context) => {
       const data = await context.api.getHistoryEvents();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     historiesResult: async (
       obj,

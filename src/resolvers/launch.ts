@@ -11,7 +11,7 @@ const resolvers: Resolvers = {
   Query: {
     launches: async (obj, { find, offset, order, sort, limit }, context) => {
       const data = await context.api.getLaunches();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     launchesPast: async (
       obj,
@@ -19,7 +19,7 @@ const resolvers: Resolvers = {
       context
     ) => {
       const data = await context.api.getPastLaunches();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     launchesPastResult: async (
       obj,
@@ -36,7 +36,7 @@ const resolvers: Resolvers = {
       context
     ) => {
       const data = await context.api.getUpcomingLaunchs();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     launch: (obj, { id }, context) => {
       return context.api.getLaunch(id);
@@ -63,7 +63,12 @@ const resolvers: Resolvers = {
     },
     rocket: async (parent, args, context) => {
       if (typeof parent.rocket === "string") {
-        const rocket = await context.api.getRocket(parent.rocket as string);
+        const ctx = context as any;
+        if (!ctx._rocketCache) ctx._rocketCache = new Map<string, Promise<any>>();
+        if (!ctx._rocketCache.has(parent.rocket)) {
+          ctx._rocketCache.set(parent.rocket, context.api.getRocket(parent.rocket));
+        }
+        const rocket = await ctx._rocketCache.get(parent.rocket);
         return {
           rocket: rocket ?? null,
           fairings: (parent as any)?.fairings,
@@ -101,7 +106,7 @@ const resolvers: Resolvers = {
     },
   },
   History: {
-    flight: async (parent, args, context) => {
+    flight: async (parent, _args, context) => {
       const data = await context.api.queryNextLaunch({
         flight_number: (parent as any)?.flight_number,
       });

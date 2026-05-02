@@ -23,38 +23,39 @@ const v5LaunchHandlers = [
 
 const v4Handlers = [
   http.get(`${BASE}/v4/launches`, () => HttpResponse.json(RAW_LAUNCHES)),
+  http.post(`${BASE}/v4/launches/query`, () => HttpResponse.json(RAW_LAUNCHES)),
 
   http.get(`${BASE}/v4/rockets`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/rockets/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/rockets/:id`, () => HttpResponse.json(null, { status: 404 })),
   http.post(`${BASE}/v4/rockets/query`, () => HttpResponse.json([])),
 
   http.get(`${BASE}/v4/capsules`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/capsules/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/capsules/:id`, () => HttpResponse.json(null, { status: 404 })),
 
   http.get(`${BASE}/v4/company`, () => HttpResponse.json({})),
 
   http.get(`${BASE}/v4/cores`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/cores/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/cores/:id`, () => HttpResponse.json(null, { status: 404 })),
 
   http.get(`${BASE}/v4/dragons`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/dragons/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/dragons/:id`, () => HttpResponse.json(null, { status: 404 })),
 
   http.get(`${BASE}/v4/history`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/history/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/history/:id`, () => HttpResponse.json(null, { status: 404 })),
   http.post(`${BASE}/v4/history/query`, () => HttpResponse.json([])),
 
   http.get(`${BASE}/v4/landpads`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/landpads/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/landpads/:id`, () => HttpResponse.json(null, { status: 404 })),
 
   http.get(`${BASE}/v4/launchpads`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/launchpads/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/launchpads/:id`, () => HttpResponse.json(null, { status: 404 })),
 
   http.get(`${BASE}/v4/payloads`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/payloads/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/payloads/:id`, () => HttpResponse.json(null, { status: 404 })),
   http.post(`${BASE}/v4/payloads/query`, () => HttpResponse.json([])),
 
   http.get(`${BASE}/v4/ships`, () => HttpResponse.json([])),
-  http.get(`${BASE}/v4/ships/:id`, () => new HttpResponse(null, { status: 404 })),
+  http.get(`${BASE}/v4/ships/:id`, () => HttpResponse.json(null, { status: 404 })),
   http.post(`${BASE}/v4/ships/query`, () => HttpResponse.json([])),
 
   http.get(`${BASE}/v4/roadster`, () => HttpResponse.json({})),

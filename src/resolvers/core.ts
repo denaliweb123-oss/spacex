@@ -5,11 +5,11 @@ const resolvers: Resolvers = {
   Query: {
     cores: async (obj, { find, offset, order, sort, limit }, context) => {
       const cores = await context.api.getCores();
-      return applyLimitOffset({ data: cores, limit, offset });
+      return applyLimitOffset({ data: cores, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     coresPast: async (obj, { find, offset, order, sort, limit }, context) => {
       const cores = await context.api.getCores();
-      return applyLimitOffset({ data: cores, limit, offset });
+      return applyLimitOffset({ data: cores, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     coresUpcoming: async (
       obj,
