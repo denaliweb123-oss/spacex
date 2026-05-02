@@ -27,51 +27,57 @@ This graph is meant for exploring historical SpaceX data. Any current space laun
 
 ## Quality Engineering & Autonomous Testing
 
-This project uses layered automated QE for GraphQL schema stability, runtime safety, and regression detection.
-
-* **Jest:** Core unit and integration testing with `ts-jest`.
-* **Apollo schema validation:** Local subgraph validation always runs; Rover schema checks run when Apollo credentials are configured.
-* **Autonomous QA:** A custom framework (`src/qa/`) derives queries from the schema, fails on high-severity anomalies, and replays persisted failures.
-
-```
-GraphQL (Resolvers)
-        ↓
-Service Layer (parse-service, pagination)
-        ↓
-API Layer (REST integration)
-        ↓
-QA Agents (Schema, Contract, Fuzz, Anomaly)
-```
+This project uses a layered, seven-stage CI pipeline for GraphQL schema stability, runtime safety, and regression detection. All 90 tests pass; HTTP is fully mocked by MSW so no live network calls occur in CI.
 
 ### Testing Framework & Tooling
 
 | Category | Tooling |
 |---|---|
-| Test Runner | Jest (ts-jest) |
-| GraphQL Execution | Apollo Server test client |
-| Schema Validation | Apollo subgraph validation + optional Rover check |
-| Mocking | Jest mocks |
-| Security Controls | Depth + complexity limits |
+| Test Runner | Jest + ts-jest (Node 22) |
+| GraphQL Execution | Apollo Server in-process test client |
+| HTTP Mocking | MSW v2 (`msw/node`) — intercepts all REST calls to `api.spacexdata.com` |
+| Schema Validation | `buildSubgraphSchema` (@apollo/subgraph) + optional Rover check |
+| Schema Diff | `@graphql-inspector/cli` diff with Federation v2 preprocessing (`scripts/strip-federation.js`) |
+| Security Controls | `graphql-depth-limit` + `graphql-validation-complexity` |
 | Autonomous QA | Custom agents (`src/qa/`) |
-| CI/CD | GitHub Actions |
+| Linting | ESLint (TypeScript rules) |
+| CI/CD | GitHub Actions — 7 sequential stages |
 
-### Autonomous QA System
+### Test Suite Structure
 
-The autonomous QA system generates GraphQL operations from the schema and runs them as part of CI.
+All test files live under `tests/` (20 files, 90 tests):
 
-* **Schema-driven query generation:** Derives root-field queries from the schema, including required-argument fixtures.
-* **Fuzz testing:** Mutates queries to simulate malformed input and adversarial query shapes.
-* **Anomaly detection:** Flags latency spikes and unexpected GraphQL execution errors.
-* **Failure memory and replay:** Persists high-severity failing queries and replays them as Jest test cases.
+```
+tests/
+├── unit/
+│   ├── resolvers/        launches, snapshot, server bootstrap
+│   ├── services/         parse-service, limit-offset-service
+│   └── utils/            depth-limit, cost-limit, error-handling, server-factory
+├── integration/          graphql API, errors, security, autonomous QA, security agent, REST API
+├── contract/             query compliance, contract agent, query generator
+├── performance/          concurrent query load + latency gate
+├── e2e/                  full query flow (MSW end-to-end)
+├── mocks/                MSW handlers + server helpers
+└── fixtures/             launches.json (pinned REST fixture)
+```
 
 ### Test Coverage Layers
 
-1. **Unit tests:** Resolver logic, `parse-service`, `limit-offset-service`, and API boundary behavior.
-2. **Integration tests:** End-to-end GraphQL execution against mocked REST responses.
-3. **Contract tests:** Schema stability validation and optional Apollo Rover checks when `APOLLO_KEY` and `APOLLO_GRAPH_REF` are configured.
-4. **Security tests:** Query depth, complexity, introspection behavior, query injection simulation, and production error masking.
-5. **Performance and resilience:** Concurrent query smoke tests, latency anomaly detection, and null-handling scenarios.
-6. **Autonomous QA:** Schema-generated queries, fuzz mutation testing, anomaly detection, failure persistence, and replay.
+1. **Unit** — Resolver field-mapping, `parse-service` (weight derivation, field renames), `limit-offset-service` (pagination edge cases), security middleware behavior, and error masking.
+2. **Integration** — Full `Query → Resolver → Service → API` pipeline executed against MSW-intercepted REST responses; covers happy path, error propagation, null handling, security rule enforcement, and autonomous anomaly detection.
+3. **Contract** — Production query shapes validated against the built subgraph schema; root field type assertions; schema-driven query generation for all 40+ resolver entry points.
+4. **E2E** — MSW-intercepted launch queries and 404 null-propagation verified through the complete server stack.
+5. **Performance** — Three concurrent `launchesPast` queries must complete in under 200 ms (in-process, no network); ten concurrent queries verified error-free.
+6. **Autonomous QA** — Schema-derived queries, fuzz variants, anomaly detection (latency + error flags), failure persistence, and replay. Zero high-severity anomalies required to pass.
+
+### Autonomous QA System
+
+The `src/qa/` framework generates GraphQL operations from the live schema and runs them as a CI gate.
+
+* **Schema-driven query generation** — derives root-field queries including required-argument fixtures (`tests/contract/query-generator.test.ts`).
+* **Fuzz testing** — mutates queries to simulate malformed input and adversarial shapes.
+* **Anomaly detection** — flags responses exceeding 1500 ms or containing unexpected errors.
+* **Failure memory and replay** — persists high-severity failures to `src/qa/memory/qa-memory.json` and replays them as Jest test cases until resolved.
 
 ### Last Recorded QA Metrics
 
@@ -85,60 +91,61 @@ The autonomous QA system generates GraphQL operations from the schema and runs t
 | Medium Severity (Latency) | 0 |
 <!-- AUTONOMOUS_QA_METRICS_END -->
 
-These metrics are written to `qa-metrics.json` when the autonomous runner is invoked with metrics writing enabled. The Jest gate disables metrics-file writes to keep normal test runs deterministic.
+Metrics are written to `qa-metrics.json` when the autonomous runner is invoked with metrics writing enabled. Normal Jest runs skip metrics-file writes to remain deterministic.
 
-### CI/CD Quality Gates
+### CI/CD Pipeline
 
-The active GitHub Actions workflow is `.github/workflows/ci.yml`. It runs on push, pull request, and manual dispatch with Node 22.
+`.github/workflows/ci.yml` — runs on every push, pull request, and manual dispatch (Node 22). Stages run sequentially; each stage must pass before the next begins.
 
-Enforced gates today:
+| Stage | Job | Command | Hard fail condition |
+|---|---|---|---|
+| 1 | Install | `npm ci` | Dependency resolution failure |
+| 2 | Lint | `npm run lint` | Any ESLint error |
+| 3 | Unit tests | `npm run test:unit -- --ci` | Any test failure |
+| 4 | Integration tests + coverage | `npm run test:integration -- --ci` then `npm run test:coverage -- --ci` | Test failure or coverage below threshold |
+| 5 | Contract tests + schema diff | `npm run test:contract -- --ci` then `@graphql-inspector/cli diff` | Contract failure or breaking schema change |
+| 6 | Build | `npm run build` (`codegen` + `tsc`) + schema validation | Compile error or invalid schema |
+| 7 | Performance smoke | `npm run test:perf -- --ci` | Latency threshold exceeded |
 
-* `npm ci`
-* `npm run build` (`graphql-codegen` + `tsc`)
-* `npm test -- --coverage --runInBand`
-* Apollo subgraph schema validation
-* Apollo Rover `subgraph check` when `APOLLO_KEY` and `APOLLO_GRAPH_REF` are configured
-* Autonomous QA replay/generation test with zero high-severity anomalies
+The schema diff step (Stage 5) strips Apollo Federation v2 directives via `scripts/strip-federation.js` before invoking `@graphql-inspector/cli`, which uses plain `buildASTSchema` and would otherwise reject the `@link` directive.
 
-Coverage is measured and printed in CI, but no minimum percentage threshold is currently enforced. Pull requests are blocked only if this CI workflow is configured as a required status check in repository branch protection.
+An optional Apollo Rover `subgraph check` runs in Stage 5 when `APOLLO_KEY` and `APOLLO_GRAPH_REF` secrets are present.
 
-Latest local coverage measurement from this test suite:
+### Coverage
 
-| Metric | Value |
-|---|---:|
-| Statements | 63.11% |
-| Branches | 31.54% |
-| Functions | 46.09% |
-| Lines | 65.20% |
+Coverage is enforced as a hard CI gate in Stage 4. Thresholds are set as regression floors against the current measured baseline:
 
-### Coverage Strategy
+| Metric | Threshold | Current |
+|---|---:|---:|
+| Statements | 55% | 64.06% |
+| Branches | 28% | 32.08% |
+| Functions | 44% | 48.36% |
+| Lines | 55% | 65.94% |
 
-Coverage goals:
+Excluded from measurement: `src/index.ts` (server entry point), `src/qa/update-readme-metrics.ts` (CI script), `src/__generated__/` (codegen output).
 
-* High coverage on service-layer business logic
-* Full validation of API-boundary behavior
-* Critical-path coverage for GraphQL resolvers
-
-### Running Tests
+### Running Tests Locally
 
 ```bash
-npm test
-npm test -- --coverage --runInBand
-npm test -- src/__tests__/autonomous/ai.qa.test.ts
-npx jest src/__tests__/autonomous/contract.agent.test.ts
-npm test -- src/__tests__/autonomous
+npm test                            # all 20 suites
+npm run test:unit                   # unit tests only
+npm run test:integration            # integration tests only
+npm run test:contract               # contract tests only
+npm run test:coverage               # unit + integration with coverage report
+npm run test:perf                   # performance smoke (serial)
+npm test -- tests/integration/security.test.ts          # single file
+npm test -- --testNamePattern="depth"                   # by test name
 ```
 
 ### Design Principles
 
-* **Shift-left testing:** Catch issues before they reach a live environment.
-* **Schema-first validation:** Treat GraphQL as a strict contract between service and client.
-* **Defense-in-depth:** Implement security at the query, resolver, and API levels.
-* **Continuous feedback:** Use generated queries, failure memory, and CI metrics to keep quality signals current.
+* **Shift-left:** Schema validation and unit tests run before integration, which runs before build.
+* **Schema-first contract:** Production query shapes are validated against the local schema on every push — breakage is caught before the registry.
+* **Defense-in-depth:** Security enforced at the validation layer (depth + complexity), resolver layer (null propagation), and API layer (error masking).
+* **No live network in CI:** MSW intercepts all REST traffic; the fixture in `tests/fixtures/launches.json` is version-pinned to prevent flakiness.
+* **Continuous feedback:** Autonomous QA failure memory means a regression that appeared once will be retested on every subsequent run until resolved.
 
-This testing system currently provides a measured CI gate for build, type generation, schema validity, Jest coverage reporting, GraphQL security behavior, and autonomous QA anomaly detection. Future hardening should add enforced coverage thresholds once the current baseline is raised, plus a required branch-protection rule for the CI workflow.
-
-Detailed strategy documentation can be found in `docs/test-strategy.md`.
+Detailed strategy documentation, including pre-testing questions, prioritized scenarios, conscious exclusions, top risks, and AI usage log: `docs/test-strategy.md`.
 
 ## Questions or Issues
 
