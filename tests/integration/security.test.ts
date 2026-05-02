@@ -2,6 +2,7 @@ import { validationRules } from "../../src/graphql/security/validationRules";
 import { createComplexityLimitRule } from "graphql-validation-complexity";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { createProductionApolloServer } from "../../src/graphql/server";
+import { calculateQueryCost, MAX_COST } from "../../src/utils/complexity";
 
 jest.mock("../../src/api", () => ({
   __esModule: true,
@@ -95,6 +96,34 @@ describe("Security — Depth Limit", () => {
     const errors = (res.body as any).singleResult.errors;
     expect(errors).toBeDefined();
     expect(errors[0].message).toMatch(/complexity/i);
+  });
+});
+
+// Risk #3 from docs/test-strategy.md: graphql-validation-complexity deduplicates
+// aliased fields via `uniqSelections`, so 500 aliases of the same field cost the
+// same as 1 alias under the library rule. The production gate (MAX_COST=1000) does
+// NOT block a 500-alias payload. The custom calculateQueryCost function counts aliases
+// correctly and would block it — but it is not wired as the enforcement rule.
+describe("Security — Alias Explosion (documented limitation)", () => {
+  let server: ReturnType<typeof buildServer>;
+  beforeAll(() => { server = buildServer(); });
+  afterAll(async () => { await server.stop(); });
+
+  it("500 aliases of the same field passes the production complexity limit (known deduplication limitation)", async () => {
+    const aliases = Array.from({ length: 500 }, (_, i) => `a${i}: launches { id }`).join(" ");
+    const res = await server.executeOperation({ query: `{ ${aliases} }` }, ctx);
+    const errors = (res.body as any).singleResult.errors ?? [];
+    // The deduplication bug: graphql-validation-complexity treats all aliases as one field.
+    // This query passes the MAX_COST=1000 gate despite being a large payload.
+    expect(errors.find((e: any) => /complexity/i.test(e.message))).toBeUndefined();
+  });
+
+  it("calculateQueryCost counts 500 aliases independently and exceeds MAX_COST", () => {
+    const aliases = Array.from({ length: 500 }, (_, i) => `a${i}: launches`).join(" ");
+    const cost = calculateQueryCost(`{ ${aliases} }`);
+    // 500 aliases × 4^1 = 2000, well above MAX_COST=1000
+    expect(cost).toBe(2000);
+    expect(cost).toBeGreaterThan(MAX_COST);
   });
 });
 

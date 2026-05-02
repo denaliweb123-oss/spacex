@@ -50,4 +50,23 @@ describe("Integration: Launches Resolver Pipeline", () => {
 
     expect((res.body as any).singleResult.data.launches[0].links).toBeNull();
   });
+
+  // Risk #2 from docs/test-strategy.md: every list resolver accepts an optional limit/offset
+  // but enforces no schema-level cap. Omitting limit returns the full upstream dataset.
+  // This test documents and gates that behavior — any resolver regression that silently drops
+  // items or throws on an unbounded call will fail here.
+  it("returns all fixture items when limit is omitted (unbounded — open risk documented in test-strategy.md)", async () => {
+    const api = new API();
+
+    const res = await server.executeOperation(
+      { query: `{ launches { id } }` },
+      { contextValue: { api } }
+    );
+
+    const data = (res.body as any).singleResult.data.launches;
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect(Array.isArray(data)).toBe(true);
+    // The MSW fixture contains multiple launches; all are returned with no limit.
+    expect(data.length).toBeGreaterThan(1);
+  });
 });
