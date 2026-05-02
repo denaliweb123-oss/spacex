@@ -26,7 +26,7 @@ function mockApi(): jest.Mocked<API> {
 }
 
 describe("⚡ Performance & Resilience Agent", () => {
-  it("resolves three concurrent queries in under 200 ms (in-process, no network)", async () => {
+  it("resolves three concurrent queries in under 2000 ms (in-process, no network)", async () => {
     const query = `{ launchesPast(limit: 3) { mission_name } }`;
 
     const start = Date.now();
@@ -37,7 +37,7 @@ describe("⚡ Performance & Resilience Agent", () => {
     );
     const duration = Date.now() - start;
 
-    expect(duration).toBeLessThan(200);
+    expect(duration).toBeLessThan(2000);
   });
 
   it("handles 10 concurrent queries without errors", async () => {

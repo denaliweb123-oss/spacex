@@ -6,12 +6,14 @@ import { http, HttpResponse } from "msw";
 import resolvers from "../../src/resolvers";
 import API from "../../src/api";
 import { server as mswServer } from "../mocks/msw.server";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 const server = new ApolloServer({
   schema: buildSubgraphSchema({
     typeDefs: gql(readFileSync("schema.graphql", { encoding: "utf-8" })),
     resolvers,
   }),
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 afterAll(async () => await server.stop());
