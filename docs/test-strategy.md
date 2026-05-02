@@ -139,3 +139,59 @@ The QA runner's `buildQaServer()` was not passing `ApolloServerPluginInlineTrace
 
 **External GraphQL API integration: Countries API**
 A typed service wrapper (`src/services/CountriesService.ts`) and MSW `graphql.link()` handlers (`tests/mocks/countries.handlers.ts`) were added to demonstrate and exercise the pattern for testing an external GraphQL API. The Countries test suite (`tests/integration/countries.graphql.test.ts`, `tests/performance/countries.load.test.ts`) covers 32 tests: basic query shape validation, all five filter operators (`eq`, `ne`, `in`, `nin`, `regex`), bonus currency consistency invariants (`Country.currency` ↔ `Country.currencies`), error propagation, and latency thresholds. All 32 tests are fully offline via MSW — no live network access required.
+
+---
+
+## Countries API — targeted test scenarios
+
+Three specific scenarios were required and are fully implemented. Each is documented below with its location, the risk it targets, and what makes it non-trivial.
+
+---
+
+### 1. Filter operators — `in`, `nin`, `regex` (and `eq`, `ne`)
+
+**File:** `tests/integration/countries.graphql.test.ts` → `describe('CountriesService — filter operators')`
+
+**Tests:**
+- `in`: returns only countries whose codes are in the set — validates that passing `{ code: { in: ["US", "CA"] } }` returns exactly those two countries and no others
+- `nin`: excludes countries whose codes are in the set — validates that `{ code: { nin: ["DE", "FR"] } }` omits both and returns the remainder
+- `regex`: returns countries whose currency matches the pattern — `{ currency: { regex: "^EUR$" } }` must return exactly DE and FR (both `EUR`), not CU (`CUC,CUP`)
+- `continent in / nin`: filter applied to a nested field (`continent.code`) rather than a root scalar, exercising the filter path through a relationship
+- `eq` and `ne` on both countries and the `getContinents` / `getLanguages` query types
+- Edge case: `in: []` (empty set) must return zero results, not all results
+
+**Why it matters:** The filter operators are the only variability axis the API exposes. A filter that silently returns all records instead of filtered ones (the most common implementation bug) would pass a simple shape test but fail here because result counts and codes are asserted exactly.
+
+**How the mock works:** The MSW `graphql.link()` handler receives the `variables.filter` object and runs the same operator logic (`eq`, `ne`, `in`, `nin`, `regex`) against the fixture dataset, so the service layer is genuinely exercising filter serialization and response mapping — not just receiving a hard-wired stub.
+
+---
+
+### 2. Performance / latency assertion on all-countries with nested fields
+
+**File:** `tests/performance/countries.load.test.ts` → `describe('CountriesService — latency')`
+
+**Tests:**
+- Single `getCountries()` call requesting `code name capital currency currencies phone phones emoji awsRegion continent { code name } languages { code name native } states { code name }` must complete in under **500 ms**
+- Same query against a synthetic 250-country dataset must complete in under **1000 ms** — validates that deserialization scales linearly rather than exponentially
+- **10 concurrent** `getCountries()` calls must all resolve within **2000 ms** — rules out a serialization bottleneck in the service layer
+- Mixed parallel fan-out (`getContinents` + `getLanguages` + filtered `getCountries` in `Promise.all`) must complete within **1500 ms** — validates that three simultaneous queries do not block each other
+
+**Why it matters:** Nested fields (`continent`, `languages`, `states`) multiply JSON payload size relative to a flat query. A service that processes response data with O(n²) field iteration would pass unit tests but fail the latency gate when all fields are requested at once.
+
+**What the threshold tests:** Because MSW intercepts at the network level in Node.js (near-zero latency), the measured time is dominated by JSON serialization, `fetch` API overhead, and any response-processing logic in `CountriesService.gql()`. The thresholds are tight enough to catch an accidental O(n) string copy per field but loose enough to survive GC pauses on a CI runner.
+
+---
+
+### 3. `Country.currency` ↔ `Country.currencies` consistency
+
+**File:** `tests/integration/countries.graphql.test.ts` → `describe('CountriesService — currency consistency')`
+
+**Tests:**
+- **Single-currency country** (`currency: "USD"`, `currencies: ["USD"]`): asserts `currency === currencies[0]` — the scalar and the array agree
+- **Multi-currency country** (`currency: "CUC,CUP"`, `currencies: ["CUC", "CUP"]`): asserts `currency === currencies.join(',')` — the scalar is the comma-joined encoding of the array
+- **Pinned real-world case — Cuba**: `currency.split(',')` must deep-equal `currencies` — validates both value equality and element order
+- **Dataset-wide invariant**: for every country in the response, `currency.split(',').length === currencies.length` — the comma-count in the scalar always matches the array length, with no off-by-one from trailing commas or empty segments
+
+**Why it matters:** `Country.currency` and `Country.currencies` are two representations of the same data returned by the same API. A client that uses `currencies` for display and `currency` for filtering (or vice versa) will produce wrong results if the two fields diverge. This scenario cannot be caught by a shape test (`toBeDefined`, `toBeInstanceOf(Array)`) — it requires asserting the semantic relationship between two fields on the same object.
+
+**The multi-currency case is the critical one:** For single-currency countries the relationship is trivially `===`. The bug surface is the comma-separated encoding for multi-currency countries, which is why Cuba (`CUC,CUP`) is pinned as a concrete example rather than relying on the dataset-wide invariant alone.
