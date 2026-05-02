@@ -1,6 +1,8 @@
 # SpaceX GraphQL API
 
 ![Discord](https://img.shields.io/discord/1022972389463687228?logo=discord&logoColor=white&color=blue&style=flat&label=Discord)
+![CI](https://github.com/apollographql/subgraph-template-typescript-apollo-server/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/WdJd2w?referralCode=xsbY2R)
 
@@ -20,6 +22,41 @@ This graph is meant for exploring historical SpaceX data. Any current space laun
 2. The Apollo DevRel team started up an [open sourced repository](https://github.com/apollographql/Space-Devs/issues) to create a GraphQL API for the LLv2. 
   a. You can query the data of this graph [here](https://studio.apollographql.com/public/space-devs/home?variant=main)
 3. Join the [Apollo Discord Server](https://discord.gg/graphos) and we can help get you plugged in.
+
+## Prerequisites
+
+| Requirement | Version |
+|---|---|
+| Node.js | >= 22.0 |
+| npm | >= 10.0 |
+
+## Getting Started
+
+```bash
+git clone https://github.com/apollographql/subgraph-template-typescript-apollo-server.git
+cd subgraph-template-typescript-apollo-server
+npm install          # installs dependencies and runs the build (postinstall hook)
+npm run dev          # start dev server with hot reload on port 4001
+```
+
+To run a production build:
+
+```bash
+npm run build        # codegen + TypeScript compile
+npm start            # serve dist/index.js
+```
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | No | `4001` | Server listen port |
+| `NODE_ENV` | No | — | Set to `production` to disable introspection |
+| `APOLLO_KEY` | CI only | — | Apollo Studio API key (schema check + publish) |
+| `APOLLO_GRAPH_REF` | CI only | — | Apollo graph reference, e.g. `SpaceX-pxxbxen@current` |
+| `PRODUCTION_URL` | CI only | — | Production router URL used by the schema publish workflow |
+
+Copy `.env.example` to `.env` and fill in values as needed for local development.
 
 ## Accessing this graph
 
@@ -146,6 +183,26 @@ npm test -- --testNamePattern="depth"                   # by test name
 * **Continuous feedback:** Autonomous QA failure memory means a regression that appeared once will be retested on every subsequent run until resolved.
 
 Detailed strategy documentation, including pre-testing questions, prioritized scenarios, conscious exclusions, top risks, and AI usage log: `docs/test-strategy.md`.
+
+## Contributing
+
+Contributions are welcome. Please follow these steps:
+
+1. Fork the repository and create a branch from `main`.
+2. Run `npm install` to set up the project.
+3. Make your changes and ensure all checks pass locally:
+   ```bash
+   npm run lint        # ESLint — must produce zero errors
+   npm test            # full test suite — all suites must pass
+   npm run build       # codegen + TypeScript compile — must succeed
+   ```
+4. Open a pull request against `main`. The CI pipeline (lint → unit → integration → contract → build → performance) must pass before merge.
+
+For bugs or feature requests, open an issue on [GitHub](https://github.com/apollographql/subgraph-template-typescript-apollo-server/issues).
+
+## License
+
+[MIT](./LICENSE) — Copyright © 2022– Apollo Graph, Inc.
 
 ## Questions or Issues
 
