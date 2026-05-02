@@ -15,10 +15,12 @@ describe("Autonomous query generation", () => {
   it("generates queries for required-argument root fields", () => {
     expect(queries).toEqual(
       expect.arrayContaining([
+        // capsule, rocket, ship have no fixture data → still use "qa-fixture-id"
         expect.stringMatching(/\bcapsule\(id: "qa-fixture-id"\)/),
-        expect.stringMatching(/\blaunch\(id: "qa-fixture-id"\)/),
         expect.stringMatching(/\brocket\(id: "qa-fixture-id"\)/),
         expect.stringMatching(/\bship\(id: "qa-fixture-id"\)/),
+        // launch has a real fixture entry → uses the pinned seed ID, not "qa-fixture-id"
+        expect.stringMatching(/\blaunch\(id: "5eb87cd9ffd86e000604b32a"\)/),
       ])
     );
   });

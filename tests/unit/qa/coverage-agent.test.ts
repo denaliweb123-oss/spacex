@@ -8,6 +8,9 @@ import {
   recordFailure,
   forgetFailure,
   readFailureMemory,
+  extractResolver,
+  clusterFailures,
+  generateCIReport,
 } from '../../../src/qa/agents/coverage-agent';
 
 const HIGH: CoverageFailure = {
@@ -103,6 +106,88 @@ describe('recordFailure — deduplication', () => {
     recordFailure({ ...HIGH, field: '{ rockets { id } }' });
     const written = JSON.parse(mockWriteFileSync.mock.calls[0][1] as string);
     expect(written.failingQueries).toHaveLength(2);
+  });
+});
+
+describe('recordFailure — knownLimitation', () => {
+  beforeEach(() => {
+    emptyMemory();
+    mockWriteFileSync.mockImplementation(jest.fn());
+    jest.spyOn(console, 'warn').mockImplementation(jest.fn());
+  });
+
+  it('emits a warn (not error) for failures with knownLimitation set', () => {
+    const limited: CoverageFailure = { ...HIGH, knownLimitation: 'capsule ID not in fixture' };
+    recordFailure(limited);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('KNOWN LIMITATION'));
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('still records the failure to memory even when knownLimitation is set', () => {
+    const limited: CoverageFailure = { ...HIGH, knownLimitation: 'capsule ID not in fixture' };
+    recordFailure(limited);
+    const written = JSON.parse(mockWriteFileSync.mock.calls[0][1] as string);
+    expect(written.failingQueries).toHaveLength(1);
+  });
+});
+
+describe('extractResolver', () => {
+  it('extracts the first word after the opening brace', () => {
+    expect(extractResolver('{ launches { id } }')).toBe('launches');
+    expect(extractResolver('{ launch(id: "x") { id } }')).toBe('launch');
+    expect(extractResolver('{ rockets(limit: 1) { id } }')).toBe('rockets');
+  });
+
+  it('returns "unknown" for strings with no leading field name', () => {
+    expect(extractResolver('')).toBe('unknown');
+    expect(extractResolver('invalid')).toBe('unknown');
+  });
+});
+
+describe('clusterFailures', () => {
+  const f1: CoverageFailure = { ...HIGH, field: '{ launches { id } }' };
+  const f2: CoverageFailure = { ...HIGH, field: '{ launches(limit: 1) { id } }' };
+  const f3: CoverageFailure = { ...MEDIUM, field: '{ rockets { id } }' };
+
+  it('groups failures by resolver name', () => {
+    const clusters = clusterFailures([f1, f2, f3]);
+    expect(clusters.size).toBe(2);
+    expect(clusters.get('launches')).toHaveLength(2);
+    expect(clusters.get('rockets')).toHaveLength(1);
+  });
+
+  it('returns an empty map for an empty input', () => {
+    expect(clusterFailures([])).toEqual(new Map());
+  });
+});
+
+describe('generateCIReport', () => {
+  it('returns a success line when there are no failures', () => {
+    expect(generateCIReport([])).toBe('✅ No anomalies detected');
+  });
+
+  it('groups real failures by resolver in the output', () => {
+    const f1: CoverageFailure = { ...HIGH, field: '{ launches { id } }' };
+    const f2: CoverageFailure = { ...HIGH, field: '{ launches { mission_name } }' };
+    const report = generateCIReport([f1, f2]);
+    expect(report).toContain('launches: 2 failure(s)');
+    expect(report).toContain('HIGH:2');
+  });
+
+  it('separates known limitations from real failures', () => {
+    const real: CoverageFailure = { ...HIGH, field: '{ rockets { id } }' };
+    const limited: CoverageFailure = { ...HIGH, field: '{ capsule(id: "x") { id } }', knownLimitation: 'no fixture data' };
+    const report = generateCIReport([real, limited]);
+    expect(report).toContain('rockets: 1 failure(s)');
+    expect(report).toContain('Known limitations');
+    expect(report).toContain('capsule: no fixture data');
+  });
+
+  it('shows success when all failures are known limitations', () => {
+    const limited: CoverageFailure = { ...HIGH, field: '{ capsule(id: "x") { id } }', knownLimitation: 'no fixture data' };
+    const report = generateCIReport([limited]);
+    expect(report).toContain('✅ No real anomalies detected');
+    expect(report).toContain('Known limitations');
   });
 });
 

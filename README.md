@@ -63,9 +63,9 @@ tests/
 │   ├── resolvers/    launches, payloads, launchpad, ships, history, snapshot, repo
 │   ├── services/     parse-service, limit-offset-service
 │   ├── utils/        depth-limit, complexity, rate-limit, error-handling, server-factory
-│   └── qa/           runner, anomaly-agent, coverage-agent, query-generator, replay-failure
-├── integration/      GraphQL API, errors, security, caching, N+1, autonomous QA
-├── contract/         query compliance, contract agent, query generator
+│   └── qa/           runner, anomaly-agent, coverage-agent, query-generator, argument-fixtures, replay-failure
+├── integration/      GraphQL API, errors, security, caching, N+1, deprecated fields, autonomous QA
+├── contract/         query compliance (37 root fields), schema diff, contract agent, query generator
 ├── performance/      concurrent query load + latency gate
 ├── e2e/              full query flow (MSW end-to-end)
 ├── mocks/            MSW handlers + server helpers
@@ -85,6 +85,7 @@ npm run test:watch         # interactive watch mode
 npm run test:spacex        # SpaceX tests only (excludes Countries API)
 npm run test:countries     # Countries API tests only (local, not in CI)
 npm run readme:update      # run tests + coverage, then patch this file
+npm run schema:heal        # regenerate query compliance tests from current schema
 ```
 
 ### CI/CD pipeline
@@ -101,7 +102,7 @@ npm run readme:update      # run tests + coverage, then patch this file
 | 6 | Build | `npm run build` + schema validation | Compile error or invalid schema |
 | 7 | Performance | `npm run test:perf -- --ci` | Latency threshold exceeded |
 
-Stage 5 strips Federation v2 directives via `scripts/strip-federation.js` before running the schema diff. An optional Apollo Rover `subgraph check` runs when `APOLLO_KEY` and `APOLLO_GRAPH_REF` are present.
+Stage 5 runs `schema.diff.test.ts` (SDL snapshot + `@graphql-inspector/core` breaking-change detection against `origin/main`) as part of `test:contract`, then also runs `graphql-inspector diff` as a CLI step after stripping Federation v2 directives via `scripts/strip-federation.js`. An optional Apollo Rover `subgraph check` runs when `APOLLO_KEY` and `APOLLO_GRAPH_REF` are present.
 
 ### Coverage
 
