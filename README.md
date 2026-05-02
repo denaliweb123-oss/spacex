@@ -114,6 +114,48 @@ tests/
 5. **Performance** — Concurrent `launchesPast` queries under 2000 ms. *(CI only: SpaceX performance. Countries API latency tests — single full-schema query under 500 ms, 250-country dataset under 1000 ms, 10 concurrent requests under 2000 ms — run locally via `test:countries`.)*
 6. **Autonomous QA** — Schema-derived queries, fuzz variants, anomaly detection (latency + error flags), failure persistence, and replay. Zero high-severity anomalies required to pass.
 
+### Countries API — Targeted Test Scenarios
+
+The Countries API suite (`tests/integration/countries.graphql.test.ts`, `tests/performance/countries.load.test.ts`) covers 32 tests across three specific scenarios. Run with `npm run test:countries`.
+
+**Filter operators** (`describe('CountriesService — filter operators')`, 10 tests)
+All five operators validated across all three query types:
+
+| Test | Operator | Entity |
+|---|---|---|
+| returns exactly the country matching the code | `eq` | `countries` |
+| excludes the specified country code | `ne` | `countries` |
+| returns only countries whose codes are in the set | `in` | `countries` |
+| excludes countries whose codes are in the set | `nin` | `countries` |
+| returns countries whose currency matches the pattern | `regex` | `countries` (currency field) |
+| returns only countries from specified continents | `in` | `countries` (continent field) |
+| excludes countries from specified continents | `nin` | `countries` (continent field) |
+| returns the single matching continent | `eq` | `continents` |
+| returns the single matching language | `eq` | `languages` |
+| empty `in: []` returns zero results | `in` | edge case |
+
+Result counts and field values are asserted exactly — a filter that silently returns all records instead of filtered ones fails here.
+
+**Performance / latency** (`describe('CountriesService — latency')`, 4 tests)
+Latency measured for a full-field query (`code name capital currency currencies phone phones emoji awsRegion continent { code name } languages { code name native } states { code name }`):
+
+| Test | Threshold |
+|---|---|
+| Single `getCountries()` with all nested fields | < 500 ms |
+| `getCountries()` against a 250-country dataset | < 1000 ms |
+| 10 concurrent `getCountries()` calls | < 2000 ms |
+| Parallel `getContinents + getLanguages + getCountries` fan-out | < 1500 ms |
+
+**Currency consistency** (`describe('CountriesService — currency consistency')`, 4 tests)
+Validates the semantic relationship between `Country.currency` (scalar) and `Country.currencies` (array):
+
+| Test | Invariant |
+|---|---|
+| Single-currency country | `currency === currencies[0]` |
+| Multi-currency country | `currency === currencies.join(',')` |
+| Cuba (`CUC,CUP`) — pinned real-world case | `currency.split(',')` deep-equals `currencies` |
+| All countries in dataset | `currency.split(',').length === currencies.length` |
+
 ### Autonomous QA System
 
 The `src/qa/` framework generates GraphQL operations from the live schema and runs them as a CI gate.
