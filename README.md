@@ -64,15 +64,15 @@ Copy `.env.example` to `.env` and fill in values as needed for local development
 
 ## Quality Engineering & Autonomous Testing
 
-This project uses a layered, seven-stage CI pipeline for GraphQL schema stability, runtime safety, and regression detection. All 90 tests pass; HTTP is fully mocked by MSW so no live network calls occur in CI.
+This project uses a layered, seven-stage CI pipeline for GraphQL schema stability, runtime safety, and regression detection. All 271 tests pass across 37 suites; HTTP is fully mocked by MSW so no live network calls occur in CI.
 
 ### Testing Framework & Tooling
 
 | Category | Tooling |
 |---|---|
-| Test Runner | Jest + ts-jest (Node 22) |
-| GraphQL Execution | Apollo Server in-process test client |
-| HTTP Mocking | MSW v2 (`msw/node`) — intercepts all REST calls to `api.spacexdata.com` |
+| Test Runner | Jest 29 + ts-jest (Node 22) |
+| GraphQL Execution | Apollo Server v4 in-process test client (`executeOperation`) |
+| HTTP Mocking | MSW v2 (`msw/node`) — intercepts REST calls to `api.spacexdata.com` and GraphQL calls to `countries.trevorblades.com` |
 | Schema Validation | `buildSubgraphSchema` (@apollo/subgraph) + optional Rover check |
 | Schema Diff | `@graphql-inspector/cli` diff with Federation v2 preprocessing (`scripts/strip-federation.js`) |
 | Security Controls | `graphql-depth-limit` + `graphql-validation-complexity` |
@@ -82,29 +82,34 @@ This project uses a layered, seven-stage CI pipeline for GraphQL schema stabilit
 
 ### Test Suite Structure
 
-All test files live under `tests/` (20 files, 90 tests):
+All test files live under `tests/` (37 suites, 271 tests):
 
 ```
 tests/
 ├── unit/
-│   ├── resolvers/        launches, snapshot, server bootstrap
+│   ├── resolvers/        launches, payloads, launchpad, ships, history, snapshot, repo
 │   ├── services/         parse-service, limit-offset-service
-│   └── utils/            depth-limit, cost-limit, error-handling, server-factory
-├── integration/          graphql API, errors, security, autonomous QA, security agent, REST API
+│   ├── utils/            depth-limit, complexity, rate-limit, error-handling, server-factory,
+│   │                     argument-fixtures
+│   └── qa/               runner (anomaly, write-metrics), anomaly-agent, coverage-agent,
+│                         query-generator, replay-failure
+├── integration/          SpaceX GraphQL API, errors, security, caching, N+1,
+│                         autonomous QA + security agent, REST API client,
+│                         Countries GraphQL API (external API integration)
 ├── contract/             query compliance, contract agent, query generator
-├── performance/          concurrent query load + latency gate
-├── e2e/                  full query flow (MSW end-to-end)
-├── mocks/                MSW handlers + server helpers
+├── performance/          SpaceX concurrent query load, Countries API latency gate
+├── e2e/                  full SpaceX query flow (MSW end-to-end)
+├── mocks/                SpaceX REST handlers, Countries GraphQL handlers, MSW server helpers
 └── fixtures/             launches.json (pinned REST fixture)
 ```
 
 ### Test Coverage Layers
 
-1. **Unit** — Resolver field-mapping, `parse-service` (weight derivation, field renames), `limit-offset-service` (pagination edge cases), security middleware behavior, and error masking.
-2. **Integration** — Full `Query → Resolver → Service → API` pipeline executed against MSW-intercepted REST responses; covers happy path, error propagation, null handling, security rule enforcement, and autonomous anomaly detection.
+1. **Unit** — Resolver field-mapping, `parse-service` (weight derivation, field renames), `limit-offset-service` (pagination edge cases), security middleware behavior, error masking, and autonomous QA agent behavior (anomaly detection, failure recording, query generation).
+2. **Integration** — Full `Query → Resolver → Service → API` pipeline executed against MSW-intercepted REST responses; covers happy path, error propagation, null handling, security rule enforcement, and autonomous anomaly detection. Includes integration tests for the external Countries GraphQL API (`getCountries`, `getContinents`, `getLanguages`, all five filter operators, and currency field consistency).
 3. **Contract** — Production query shapes validated against the built subgraph schema; root field type assertions; schema-driven query generation for all 40+ resolver entry points.
 4. **E2E** — MSW-intercepted launch queries and 404 null-propagation verified through the complete server stack.
-5. **Performance** — Three concurrent `launchesPast` queries must complete in under 200 ms (in-process, no network); ten concurrent queries verified error-free.
+5. **Performance** — Concurrent `launchesPast` queries under 2000 ms; Countries API latency gate: single full-schema query under 500 ms, 250-country dataset under 1000 ms, 10 concurrent requests under 2000 ms.
 6. **Autonomous QA** — Schema-derived queries, fuzz variants, anomaly detection (latency + error flags), failure persistence, and replay. Zero high-severity anomalies required to pass.
 
 ### Autonomous QA System
@@ -154,24 +159,27 @@ Coverage is enforced as a hard CI gate in Stage 4. Thresholds are set as regress
 
 | Metric | Threshold | Current |
 |---|---:|---:|
-| Statements | 55% | 64.06% |
-| Branches | 28% | 32.08% |
-| Functions | 44% | 48.36% |
-| Lines | 55% | 65.94% |
+| Statements | 55% | 92.64% |
+| Branches | 60% | 88.41% |
+| Functions | 44% | 93.02% |
+| Lines | 55% | 94.29% |
 
 Excluded from measurement: `src/index.ts` (server entry point), `src/qa/update-readme-metrics.ts` (CI script), `src/__generated__/` (codegen output).
 
 ### Running Tests Locally
 
 ```bash
-npm test                            # all 20 suites
+npm test                            # all 37 suites (SpaceX + Countries)
+npm run test:spacex                 # SpaceX tests only (35 suites, 239 tests)
+npm run test:countries              # Countries API tests only (2 suites, 32 tests)
 npm run test:unit                   # unit tests only
 npm run test:integration            # integration tests only
 npm run test:contract               # contract tests only
 npm run test:coverage               # unit + integration with coverage report
 npm run test:perf                   # performance smoke (serial)
+npm run test:watch                  # interactive watch mode for local development
 npm test -- tests/integration/security.test.ts          # single file
-npm test -- --testNamePattern="depth"                   # by test name
+npm test -- --testNamePattern="filter operators"         # by test name
 ```
 
 ### Design Principles
