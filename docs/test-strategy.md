@@ -44,6 +44,11 @@ This is a Federation subgraph. A field rename or type change that isn't caught l
 **5. Performance smoke** (`tests/performance/query.load.test.ts`)
 No upstream rate limit means a resolver regression (e.g., removing caching, adding a blocking loop) won't surface in unit tests. A concurrency baseline in CI acts as a canary.
 
+**6. N+1 Query Batching** (`tests/integration/nplusone.test.ts`)
+Fetching lists of entities (launches, ships) that require sub-queries (rockets, payloads) can lead to request waterfalls. 
+This is a primary risk for GraphQL-over-REST proxies. Verified by counting underlying datasource calls 
+within a single execution.
+
 ---
 
 ## What was not tested, and why
@@ -63,6 +68,11 @@ No upstream rate limit means a resolver regression (e.g., removing caching, addi
 ---
 
 ## Top risks (ranked)
+
+**0. N+1 Performance Degradation**
+The "N+1 problem" is inherent to GraphQL resolvers that map to non-batched REST endpoints. 
+If DataLoader or RESTDataSource memoization fails, a single client request can trigger dozens of upstream calls. 
+Mitigation: Explicit integration test `nplusone.test.ts` tracks underlying datasource invocations.
 
 **1. Silent null propagation from deprecated upstream fields**
 `Capsule.dragon` and others return null after the MongoDB deprecation. In a nullable schema, a null resolver "succeeds" — the client gets partial data with no error. Mitigation: `errors.test.ts` verifies null handling explicitly.
@@ -89,7 +99,7 @@ The tool uses `buildASTSchema` internally, which doesn't understand `@link`. Wit
 **Prompt 1 — risk surface**
 > "I'm building a test strategy for a GraphQL API that is a read-only proxy over a SpaceX REST API. It uses Apollo Federation v2, has no authentication, and is exposed publicly. What are the highest-risk test scenarios and what edge cases specific to GraphQL-over-REST would I miss?"
 
-AI returned 7 risks: N+1, null propagation, introspection abuse, nested DoS, schema drift, alias explosion, optional pagination. Adopted 5 of 7 directly into the risk register above. Introspection was already handled by the server config (not a gap). Schema drift was noted as the motivation for version-pinning MSW fixtures rather than a new test.
+AI returned 7 risks: N+1, null propagation, introspection abuse, nested DoS, schema drift, alias explosion, optional pagination. Adopted 6 of 7 directly into the risk register above (N+1 added in cycle 2). Introspection was already handled by the server config (not a gap). Schema drift was noted as the motivation for version-pinning MSW fixtures rather than a new test.
 
 **Prompt 2 — scoping questions**
 > "Before testing an Apollo Federation subgraph that proxies a third-party REST API with no auth and no mutations, what questions would a QA engineer need answered? Group by API surface, data contract, security, CI constraints."

@@ -72,7 +72,7 @@ Each request receives a `DataSourceContext` (defined in [src/types/DataSourceCon
 
 Tests use Jest with `ts-jest`. All test files live under the top-level `tests/` directory.
 
-- **Integration Tests (`tests/integration/`):** `launches.integration.test.ts`, `full-query-flow.test.ts`.
+- **Integration Tests (`tests/integration/`):** `launches.integration.test.ts`, `full-query-flow.test.ts`, `nplusone.test.ts`.
 - **Unit Tests (`tests/unit/`):** `api.test.ts`, `resolvers/launches.test.ts`.
 - **Contract Tests (`tests/contract/`):** `schema.diff.test.ts`, `query.compliance.test.ts`.
 - **Performance Tests (`tests/performance/`):** `load.test.ts`.

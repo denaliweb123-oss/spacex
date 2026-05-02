@@ -1,5 +1,8 @@
-import { parse } from 'graphql';
-import { calculateQueryCost, calculateQueryDepth } from '../../../src/utils/complexity';
+import { parse, validate } from 'graphql';
+import { calculateQueryCost, calculateQueryDepth, depthLimitRule, MAX_DEPTH } from '../../../src/utils/complexity';
+import { buildSubgraphSchema } from '@apollo/subgraph';
+import gql from 'graphql-tag';
+import { readFileSync } from 'fs';
 
 // DEPTH_COST_BASE = 4 (internal constant)
 // cost at depth d = 4^(d+1), where d starts at 0
@@ -95,5 +98,44 @@ describe('calculateQueryCost', () => {
   it('charges for every alias independently (guarding against alias explosion)', () => {
     const query = '{ a: launches, b: launches, c: launches }';
     expect(calculateQueryCost(query)).toBe(12);
+  });
+
+  describe('depthLimitRule with introspection', () => {
+    const typeDefs = gql(readFileSync('schema.graphql', { encoding: 'utf-8' }));
+    // Mock resolvers are needed to build a valid schema, even if not used for execution
+    const mockResolvers = {
+      Query: {
+        __schema: () => ({}), // Minimal mock for introspection
+      },
+    };
+    const schema = buildSubgraphSchema({ typeDefs, resolvers: mockResolvers });
+
+    it('should block queries that exceed the depth limit', () => {
+      // launches(0→1) rocket×7(1→8) id(leaf@8): 8 > MAX_DEPTH → blocked
+      const tooDeep = `{
+        launches { rocket { rocket { rocket { rocket { rocket { rocket { rocket { id } } } } } } } }
+      }`;
+      const document = parse(tooDeep);
+      const errors = validate(schema, document, [depthLimitRule]);
+      const depthError = errors.find(e => e.message.includes('exceeds maximum operation depth'));
+      expect(depthError).toBeDefined();
+      expect(depthError?.message).toContain(`exceeds maximum operation depth of ${MAX_DEPTH}`);
+    });
+
+    it('should block circular fragments that exceed depth', () => {
+      // This construction attempts to hide depth through fragment recursion.
+      // A robust depth-limit rule must track depth across fragment spreads.
+      const circularQuery = `
+        query CircularBypass {
+          ...A
+        }
+        fragment A on Query { launches { ...B } }
+        fragment B on Launch { rocket { ...A } }
+      `;
+      const document = parse(circularQuery);
+      const errors = validate(schema, document, [depthLimitRule]);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].message).toMatch(/exceeds maximum operation depth/);
+    });
   });
 });

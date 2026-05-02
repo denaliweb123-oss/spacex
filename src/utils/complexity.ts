@@ -29,7 +29,7 @@ export function calculateQueryDepth(document: DocumentNode): number {
   ): void {
     for (const node of selections) {
       if (node.kind === 'Field') {
-        if (node.name?.value.startsWith('__')) continue;
+        if (node.name?.value?.startsWith('__')) continue;
         const current = depth + 1;
         if (current > maxDepth) maxDepth = current;
         if (node.selectionSet) walk(node.selectionSet.selections, current);
@@ -70,7 +70,7 @@ export function calculateQueryCost(query: string): number {
   ): void {
     for (const node of selections) {
       if (node.kind === 'Field') {
-        if (node.name?.value.startsWith('__')) continue;
+        if (node.name?.value?.startsWith('__')) continue;
         total += Math.pow(DEPTH_COST_BASE, depth + 1);
         if (node.selectionSet) walk(node.selectionSet.selections, depth + 1);
       } else if (node.kind === 'InlineFragment') {
