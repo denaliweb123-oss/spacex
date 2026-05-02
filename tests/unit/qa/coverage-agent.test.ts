@@ -28,7 +28,7 @@ const mockExistsSync = fs.existsSync as jest.Mock;
 const mockReadFileSync = fs.readFileSync as jest.Mock;
 const mockWriteFileSync = fs.writeFileSync as jest.Mock;
 
-beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => {}));
+beforeEach(() => jest.spyOn(console, 'error').mockImplementation(jest.fn()));
 afterEach(() => jest.restoreAllMocks());
 
 function setMemory(memory: object) {
@@ -60,7 +60,7 @@ describe('readFailureMemory', () => {
 describe('recordFailure — bucket routing', () => {
   beforeEach(() => {
     emptyMemory();
-    mockWriteFileSync.mockImplementation(() => {});
+    mockWriteFileSync.mockImplementation(jest.fn());
   });
 
   it('routes HIGH severity to failingQueries', () => {
@@ -86,7 +86,7 @@ describe('recordFailure — bucket routing', () => {
 
 describe('recordFailure — deduplication', () => {
   beforeEach(() => {
-    mockWriteFileSync.mockImplementation(() => {});
+    mockWriteFileSync.mockImplementation(jest.fn());
   });
 
   it('updates an existing entry instead of appending a duplicate', () => {
@@ -108,7 +108,7 @@ describe('recordFailure — deduplication', () => {
 
 describe('forgetFailure', () => {
   beforeEach(() => {
-    mockWriteFileSync.mockImplementation(() => {});
+    mockWriteFileSync.mockImplementation(jest.fn());
   });
 
   it('removes a matching HIGH failure from failingQueries', () => {

@@ -26,7 +26,7 @@ describe("Server bootstrap", () => {
     const schema = buildSubgraphSchema({ typeDefs, resolvers });
     const queryType = schema.getQueryType();
     expect(queryType).toBeDefined();
-    expect(Object.keys(queryType!.getFields()).length).toBeGreaterThan(0);
+    expect(Object.keys(queryType?.getFields() ?? {}).length).toBeGreaterThan(0);
   });
 
   it("schema exposes the Launch type", () => {
