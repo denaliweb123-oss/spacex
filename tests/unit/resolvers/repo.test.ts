@@ -3,6 +3,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../../src/resolvers";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../../src/api", () => ({
   __esModule: true,
@@ -17,7 +18,10 @@ describe("Server bootstrap", () => {
   });
 
   it("starts and stops an ApolloServer without errors", async () => {
-    const server = new ApolloServer({ schema: buildSubgraphSchema({ typeDefs, resolvers }) });
+    const server = new ApolloServer({
+      schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
     await server.start();
     await expect(server.stop()).resolves.not.toThrow();
   });

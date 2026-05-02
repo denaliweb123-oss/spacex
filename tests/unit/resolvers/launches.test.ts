@@ -4,11 +4,15 @@ import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../../src/resolvers";
 import API from "../../../src/api";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../../src/api");
 
 const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
-const server = new ApolloServer({ schema: buildSubgraphSchema({ typeDefs, resolvers }) });
+const server = new ApolloServer({
+  schema: buildSubgraphSchema({ typeDefs, resolvers }),
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
+});
 
 afterAll(() => server.stop());
 

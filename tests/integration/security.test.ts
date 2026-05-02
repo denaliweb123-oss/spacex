@@ -10,7 +10,11 @@ jest.mock("../../src/api", () => ({
 }));
 
 import API from "../../src/api";
-const ctx = { contextValue: { api: new API() } } as any;
+
+let ctx: any;
+beforeEach(() => {
+  ctx = { contextValue: { api: new API() } };
+});
 
 function buildServer(opts: { rules?: any[]; introspection?: boolean } = {}) {
   return createProductionApolloServer({
@@ -21,8 +25,18 @@ function buildServer(opts: { rules?: any[]; introspection?: boolean } = {}) {
 }
 
 describe("Security — Complexity Limit", () => {
+  let server: ReturnType<typeof buildServer>;
+  let strictServer: ReturnType<typeof buildServer>;
+  beforeAll(() => {
+    server = buildServer();
+    strictServer = buildServer({ rules: [createComplexityLimitRule(5)] });
+  });
+  afterAll(async () => {
+    await server.stop();
+    await strictServer.stop();
+  });
+
   it("allows a low-complexity query", async () => {
-    const server = buildServer();
     const res = await server.executeOperation(
       { query: `{ rockets(limit: 1) { id name } }` },
       ctx
@@ -32,7 +46,6 @@ describe("Security — Complexity Limit", () => {
   });
 
   it("blocks a query that exceeds the configured complexity limit", async () => {
-    const strictServer = buildServer({ rules: [createComplexityLimitRule(5)] });
     const aliases = Array.from({ length: 20 }, (_, i) => `a${i}: launches { id }`).join(" ");
     const res = await strictServer.executeOperation({ query: `{ ${aliases} }` }, ctx);
     const errors = (res.body as any).singleResult.errors;
@@ -42,8 +55,18 @@ describe("Security — Complexity Limit", () => {
 });
 
 describe("Security — Depth Limit", () => {
+  let server: ReturnType<typeof buildServer>;
+  let strictServer: ReturnType<typeof buildServer>;
+  beforeAll(() => {
+    server = buildServer();
+    strictServer = buildServer({ rules: [createComplexityLimitRule(5)] });
+  });
+  afterAll(async () => {
+    await server.stop();
+    await strictServer.stop();
+  });
+
   it("allows a query within the depth limit", async () => {
-    const server = buildServer();
     const res = await server.executeOperation(
       { query: `{ launches(limit: 1) { id mission_name } }` },
       ctx
@@ -53,7 +76,6 @@ describe("Security — Depth Limit", () => {
   });
 
   it("blocks queries exceeding the maxDepth of 8", async () => {
-    const server = buildServer();
     const deepQuery = `
       query {
         launches { rocket { rocket { rocket { rocket { rocket { rocket { rocket { id } } } } } } } }
@@ -67,7 +89,6 @@ describe("Security — Depth Limit", () => {
 
   it("blocks queries exceeding maxComplexity of 1000", async () => {
     // launches { id } has list-factor cost 10; threshold 5 ensures the rule fires
-    const strictServer = buildServer({ rules: [createComplexityLimitRule(5)] });
     const res = await strictServer.executeOperation(
       { query: `{ launches { id } }` },
       ctx
@@ -79,9 +100,22 @@ describe("Security — Depth Limit", () => {
 });
 
 describe("Security — Introspection", () => {
+  let enabledServer: ReturnType<typeof buildServer>;
+  let disabledServer: ReturnType<typeof buildServer>;
+  let defaultServer: ReturnType<typeof buildServer>;
+  beforeAll(() => {
+    enabledServer = buildServer({ introspection: true });
+    disabledServer = buildServer({ introspection: false });
+    defaultServer = buildServer();
+  });
+  afterAll(async () => {
+    await enabledServer.stop();
+    await disabledServer.stop();
+    await defaultServer.stop();
+  });
+
   it("allows introspection when enabled", async () => {
-    const server = buildServer({ introspection: true });
-    const res = await server.executeOperation(
+    const res = await enabledServer.executeOperation(
       { query: `{ __schema { queryType { name } } }` },
       ctx
     );
@@ -90,8 +124,7 @@ describe("Security — Introspection", () => {
   });
 
   it("blocks introspection when disabled", async () => {
-    const server = buildServer({ introspection: false });
-    const res = await server.executeOperation(
+    const res = await disabledServer.executeOperation(
       { query: `{ __schema { types { name } } }` },
       ctx
     );
@@ -99,8 +132,7 @@ describe("Security — Introspection", () => {
   });
 
   it("rejects unknown fields regardless of introspection setting", async () => {
-    const server = buildServer();
-    const res = await server.executeOperation({ query: `{ nonExistentField }` }, ctx);
+    const res = await defaultServer.executeOperation({ query: `{ nonExistentField }` }, ctx);
     expect((res.body as any).singleResult.errors).toBeDefined();
   });
 });

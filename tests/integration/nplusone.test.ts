@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../../src/resolvers";
 import API from "../../src/api";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../src/api");
 
@@ -15,6 +16,7 @@ describe("Integration: N+1 Query Verification", () => {
   beforeAll(() => {
     server = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
   });
 

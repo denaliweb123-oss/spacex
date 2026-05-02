@@ -5,6 +5,7 @@ import gql from "graphql-tag";
 import resolvers from "../../../src/resolvers";
 import { validationRules } from "../../../src/graphql/security/validationRules";
 import depthLimit from "graphql-depth-limit";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../../src/api", () => ({
   __esModule: true,
@@ -16,6 +17,7 @@ const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 const server = new ApolloServer({
   schema: buildSubgraphSchema({ typeDefs, resolvers }),
   validationRules,
+  plugins: [ApolloServerPluginInlineTraceDisabled()],
 });
 
 function depthError(errors: any[]): any | undefined {
@@ -57,6 +59,7 @@ describe("Query Depth Limiting", () => {
     const strictServer = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       validationRules: [depthLimit(6)],
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
     const res = await strictServer.executeOperation({
       query: `{
@@ -102,6 +105,7 @@ describe("Query Depth Limiting", () => {
     const strictServer = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       validationRules: [depthLimit(1)],
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
     const res = await strictServer.executeOperation({
       query: `{

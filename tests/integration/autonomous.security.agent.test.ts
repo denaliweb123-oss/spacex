@@ -47,15 +47,46 @@ jest.mock("../../src/api", () => ({
 
 const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 
-const server = new ApolloServer({
-  schema: buildSubgraphSchema({ typeDefs, resolvers }),
-  validationRules,
-  plugins: [ApolloServerPluginInlineTraceDisabled()],
-});
-
-const ctx = { contextValue: { api: new API() } };
-
 describe("🛡️ Security & Abuse Agent", () => {
+  let server: ApolloServer;
+  let strictServer: ApolloServer;
+  let hardenedServer: ApolloServer;
+  let authServer: ApolloServer;
+  const ctx = { contextValue: { api: new API() } };
+
+  beforeAll(() => {
+    server = new ApolloServer({
+      schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      validationRules,
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
+    strictServer = new ApolloServer({
+      schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      validationRules: [depthLimit(6)],
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
+    hardenedServer = new ApolloServer({
+      schema: buildSubgraphSchema({ typeDefs, resolvers }),
+      introspection: false,
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
+    authServer = new ApolloServer({
+      schema: buildSubgraphSchema({
+        typeDefs,
+        resolvers: {
+          Mutation: {
+            insert_users: () => { throw new Error("Not Authorized"); },
+          },
+        },
+      }),
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
+    });
+  });
+
+  afterAll(async () => {
+    await Promise.all([server, strictServer, hardenedServer, authServer].map(s => s.stop()));
+  });
+
   it("rejects unknown fields (query injection attempt)", async () => {
     const res = await server.executeOperation(
       { query: `{ __typename maliciousField }` },
@@ -65,11 +96,6 @@ describe("🛡️ Security & Abuse Agent", () => {
   });
 
   it("blocks deep query attack simulation", async () => {
-    const strictServer = new ApolloServer({
-      schema: buildSubgraphSchema({ typeDefs, resolvers }),
-      validationRules: [depthLimit(6)],
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
     const res = await strictServer.executeOperation(
       {
         query: `
@@ -100,11 +126,6 @@ describe("🛡️ Security & Abuse Agent", () => {
   });
 
   it("prevents schema introspection abuse in hardened mode", async () => {
-    const hardenedServer = new ApolloServer({
-      schema: buildSubgraphSchema({ typeDefs, resolvers }),
-      introspection: false,
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
     const res = await hardenedServer.executeOperation({
       query: `{ __schema { types { name } } }`,
     });
@@ -112,18 +133,6 @@ describe("🛡️ Security & Abuse Agent", () => {
   });
 
   it("verifies that mutations return Not Authorized", async () => {
-    const authServer = new ApolloServer({
-      schema: buildSubgraphSchema({
-        typeDefs,
-        resolvers: {
-          Mutation: {
-            insert_users: () => { throw new Error("Not Authorized"); }
-          }
-        }
-      }),
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
-
     const mutation = `mutation { insert_users(objects: { name: "Test" }) { affected_rows } }`;
     const res = await authServer.executeOperation({ query: mutation });
     const result = (res.body as any).singleResult;

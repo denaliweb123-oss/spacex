@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { handlers } from './handlers';
 
@@ -47,10 +47,8 @@ export function simulateHttpError(status: number, ...urlPatterns: string[]): voi
 export function simulateSlowResponse(delayMs: number, ...urlPatterns: string[]): void {
   server.use(
     ...urlPatterns.flatMap((pattern) => [
-      http.get(pattern, async ({ request }) => {
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-        // Fall through to the default handler after the delay.
-        // MSW executes the next matching handler when passthrough() is called.
+      http.get(pattern, async () => {
+        await delay(delayMs);
         return HttpResponse.json(null);
       }),
     ]),
