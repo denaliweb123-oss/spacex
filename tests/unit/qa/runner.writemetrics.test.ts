@@ -65,12 +65,9 @@ describe('runAutonomousQA — writeMetrics path', () => {
     );
   }, 30000);
 
-  it('does not write qa-metrics.json when writeMetrics is false', async () => {
+  it('does not write qa-metrics.json when writeMetrics is false or omitted', async () => {
     await runAutonomousQA({ writeMetrics: false });
     expect(mockWriteFileSync).not.toHaveBeenCalled();
-  }, 30000);
-
-  it('does not write qa-metrics.json when writeMetrics is omitted (defaults false)', async () => {
     await runAutonomousQA();
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   }, 30000);

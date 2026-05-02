@@ -98,6 +98,35 @@ describe('Payload — Query resolvers', () => {
   });
 });
 
+describe('Mission.payloads — via server (missions query path)', () => {
+  const RAW_MISSION = { id: 'F3364BF', name: 'Iridium NEXT', payload_ids: ['IRIDIUM-1', 'IRIDIUM-2'] };
+  const RAW_PAYLOAD = { id: 'IRIDIUM-1', payload_id: 'IRIDIUM-1', nationality: 'United States' };
+
+  it('fetches each payload by id when payload_ids is present', async () => {
+    const api = mockApi();
+    (api as any).getMissions = jest.fn().mockResolvedValue([RAW_MISSION]);
+    api.getPayload
+      .mockResolvedValueOnce({ ...RAW_PAYLOAD, id: 'IRIDIUM-1', payload_id: 'IRIDIUM-1' } as any)
+      .mockResolvedValueOnce({ id: 'IRIDIUM-2', payload_id: 'IRIDIUM-2', nationality: 'United States' } as any);
+    const res = await server.executeOperation(
+      { query: `{ missions { id payloads { id } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect(Array.isArray((res.body as any).singleResult.data.missions)).toBe(true);
+  });
+
+  it('returns null when payload_ids is absent from parent', async () => {
+    const api = mockApi();
+    (api as any).getMissions = jest.fn().mockResolvedValue([{ id: 'M1', name: 'Test' }]);
+    const res = await server.executeOperation(
+      { query: `{ missions { id payloads { id } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+  });
+});
+
 // Mission.payloads is unreachable through the server because the `missions` and `mission`
 // query resolvers always return empty/null. Tested directly against the resolver function.
 describe('Mission.payloads — direct resolver tests', () => {

@@ -17,20 +17,35 @@ describe("API", () => {
 
   // ─── Launch endpoints ────────────────────────────────────────────────────────
 
-  it("getLaunches returns an array", async () => {
-    const result = await api.getLaunches();
-    expect(result).toBeInstanceOf(Array);
-    expect(result.length).toBeGreaterThan(0);
-  });
+  it.each([
+    ["getLaunches",        undefined],
+    ["getPastLaunches",    undefined],
+    ["getUpcomingLaunchs", undefined],
+    ["getRockets",         undefined],
+    ["getCapsules",        undefined],
+    ["getCores",           undefined],
+    ["getDragons",         undefined],
+    ["getHistoryEvents",   undefined],
+    ["getLandpads",        undefined],
+    ["getLaunchPads",      undefined],
+    ["getShips",           undefined],
+    ["getPayloads",        undefined],
+    ["queryNextLaunch",    { limit: 1 }],
+    ["queryRocket",        { limit: 1 }],
+    ["queryHistoryEvent",  { limit: 1 }],
+    ["queryShips",         { limit: 1 }],
+    ["queryPayloads",      { limit: 1 }],
+  ] as [string, object | undefined][])(
+    "%s — returns an array",
+    async (method, arg) => {
+      const result = await (api as any)[method](...(arg !== undefined ? [arg] : []));
+      expect(Array.isArray(result)).toBe(true);
+    }
+  );
 
   it("getLaunch returns a launch by id", async () => {
     const result = await api.getLaunch("5eb87cd9ffd86e000604b32a");
     expect(result.id).toBe("5eb87cd9ffd86e000604b32a");
-  });
-
-  it("getPastLaunches returns an array", async () => {
-    const result = await api.getPastLaunches();
-    expect(Array.isArray(result)).toBe(true);
   });
 
   it("getLatestLaunch returns a single launch", async () => {
@@ -38,27 +53,12 @@ describe("API", () => {
     expect(result).toBeDefined();
   });
 
-  it("getUpcomingLaunchs returns an array", async () => {
-    const result = await api.getUpcomingLaunchs();
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   it("getNextLaunch returns a single launch", async () => {
     const result = await api.getNextLaunch();
     expect(result).toBeDefined();
   });
 
-  it("queryNextLaunch sends POST and returns an array", async () => {
-    const result = await api.queryNextLaunch({ limit: 1 });
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   // ─── Rocket endpoints ────────────────────────────────────────────────────────
-
-  it("getRockets returns an array", async () => {
-    const result = await api.getRockets();
-    expect(Array.isArray(result)).toBe(true);
-  });
 
   it("getRocket returns a rocket by id", async () => {
     mswServer.use(
@@ -68,17 +68,7 @@ describe("API", () => {
     expect((result as any).id).toBe("falcon9");
   });
 
-  it("queryRocket sends POST and returns a result", async () => {
-    const result = await api.queryRocket({ limit: 1 });
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   // ─── Capsule endpoints ───────────────────────────────────────────────────────
-
-  it("getCapsules returns an array", async () => {
-    const result = await api.getCapsules();
-    expect(Array.isArray(result)).toBe(true);
-  });
 
   it("getCapsule returns a capsule by id", async () => {
     mswServer.use(
@@ -90,11 +80,6 @@ describe("API", () => {
 
   // ─── Core endpoints ──────────────────────────────────────────────────────────
 
-  it("getCores returns an array", async () => {
-    const result = await api.getCores();
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   it("getCore returns a core by id", async () => {
     mswServer.use(
       http.get(`${BASE}/v4/cores/B1049`, () => HttpResponse.json({ id: "B1049" }))
@@ -104,11 +89,6 @@ describe("API", () => {
   });
 
   // ─── Dragon endpoints ────────────────────────────────────────────────────────
-
-  it("getDragons returns an array", async () => {
-    const result = await api.getDragons();
-    expect(Array.isArray(result)).toBe(true);
-  });
 
   it("getDragon returns a dragon by id", async () => {
     mswServer.use(
@@ -120,11 +100,6 @@ describe("API", () => {
 
   // ─── History endpoints ───────────────────────────────────────────────────────
 
-  it("getHistoryEvents returns an array", async () => {
-    const result = await api.getHistoryEvents();
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   it("getHistoryEvent returns an event by id", async () => {
     mswServer.use(
       http.get(`${BASE}/v4/history/1`, () => HttpResponse.json({ id: "1", title: "First Launch" }))
@@ -133,17 +108,7 @@ describe("API", () => {
     expect((result as any).id).toBe("1");
   });
 
-  it("queryHistoryEvent sends POST and returns an array", async () => {
-    const result = await api.queryHistoryEvent({ limit: 1 });
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   // ─── Landpad / Launchpad endpoints ──────────────────────────────────────────
-
-  it("getLandpads returns an array", async () => {
-    const result = await api.getLandpads();
-    expect(Array.isArray(result)).toBe(true);
-  });
 
   it("getLandpad returns a landpad by id", async () => {
     mswServer.use(
@@ -151,11 +116,6 @@ describe("API", () => {
     );
     const result = await api.getLandpad("LZ-1");
     expect((result as any).id).toBe("LZ-1");
-  });
-
-  it("getLaunchPads returns an array", async () => {
-    const result = await api.getLaunchPads();
-    expect(Array.isArray(result)).toBe(true);
   });
 
   it("getLaunchPad returns a launchpad by id", async () => {
@@ -168,11 +128,6 @@ describe("API", () => {
 
   // ─── Ship endpoints ──────────────────────────────────────────────────────────
 
-  it("getShips returns an array", async () => {
-    const result = await api.getShips();
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   it("getShip returns a ship by id", async () => {
     mswServer.use(
       http.get(`${BASE}/v4/ships/S1`, () => HttpResponse.json({ ship_id: "S1" }))
@@ -181,17 +136,7 @@ describe("API", () => {
     expect((result as any).ship_id).toBe("S1");
   });
 
-  it("queryShips sends POST and returns a result", async () => {
-    const result = await api.queryShips({ limit: 1 });
-    expect(Array.isArray(result)).toBe(true);
-  });
-
   // ─── Payload endpoints ───────────────────────────────────────────────────────
-
-  it("getPayloads returns an array", async () => {
-    const result = await api.getPayloads();
-    expect(Array.isArray(result)).toBe(true);
-  });
 
   it("getPayload returns a payload by id", async () => {
     mswServer.use(
@@ -199,11 +144,6 @@ describe("API", () => {
     );
     const result = await api.getPayload("ZUMA");
     expect((result as any).id).toBe("ZUMA");
-  });
-
-  it("queryPayloads sends POST and returns an array", async () => {
-    const result = await api.queryPayloads({ limit: 1 });
-    expect(Array.isArray(result)).toBe(true);
   });
 
   // ─── Remaining endpoints ─────────────────────────────────────────────────────

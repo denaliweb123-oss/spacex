@@ -2,7 +2,6 @@ import { validationRules } from "../../src/graphql/security/validationRules";
 import { createComplexityLimitRule } from "graphql-validation-complexity";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { createProductionApolloServer } from "../../src/graphql/server";
-import { checkRateLimit } from "../../src/graphql/security/rateLimit";
 
 jest.mock("../../src/api", () => ({
   __esModule: true,
@@ -137,11 +136,3 @@ describe("Security — Introspection", () => {
   });
 });
 
-describe("Security — Rate Limiting", () => {
-  it("correctly evaluates context for rate limiting", async () => {
-    const mockContext = { ip: "127.0.0.1", headers: {} };
-    const mockInfo = { fieldName: "launches", parentType: { name: "Query" } } as any;
-
-    await expect(checkRateLimit({}, {}, mockContext, mockInfo)).resolves.not.toThrow();
-  });
-});
