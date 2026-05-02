@@ -1,4 +1,4 @@
-import { Launch } from "./__generated__/resolvers-types";
+import { Launch, Payload } from "./__generated__/resolvers-types";
 
 export const parseShip = (ship: any) => {
   const lbPerKg = 2.20462262;
@@ -29,16 +29,19 @@ export const parseLaunchpad = (pad: any) => {
   return padParsed;
 };
 
-export const parseMissions = (mission: any) => ({
-  ...mission,
-  id: mission.mission_id,
-  name: mission.mission_name
-});
+export const parseMissions = (mission: any) => {
+  if (!mission) return null;
+  return {
+    ...mission,
+    id: mission.mission_id,
+    name: mission.mission_name
+  };
+};
 
 export const parsePayloadObj = (payload: any) => ({ ...payload, id: payload.id || payload.payload_id });
 
-export const parsePayloads = (data: any, query: any) => {
-  const payloads: Array<any> = [];
+export const parsePayloads = (data: any[], query: any): Payload[] => {
+  const payloads: Array<Payload> = [];
   let match: number;
   data.forEach((launch: Launch) => {
     launch.rocket?.second_stage?.payloads?.forEach(payloadObj => {
@@ -46,7 +49,7 @@ export const parsePayloads = (data: any, query: any) => {
       match = 0;
       if (Object.keys(query).length !== 0) {
         Object.entries(query).forEach(([key, value]) => {
-          if (value === payload[key]) {
+          if (value === payload[key as keyof Payload]) {
             match += 1;
           }
         });

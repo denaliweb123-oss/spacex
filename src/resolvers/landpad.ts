@@ -5,7 +5,7 @@ const resolvers: Resolvers = {
   Query: {
     landpads: async (obj, { limit, offset }, context) => {
       const data = await context.api.getLandpads();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     landpad: async (obj, { id }, context) => {
       return context.api.getLandpad(id);

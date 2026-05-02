@@ -5,7 +5,7 @@ const resolvers: Resolvers = {
   Query: {
     rockets: async (obj, { limit, offset }, context) => {
       const data = await context.api.getRockets();
-      return applyLimitOffset({ data, limit, offset });
+      return applyLimitOffset({ data, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     rocketsResult: (obj, { limit, offset }, context) => {
       return context.api.queryRocket({ limit, offset });

@@ -91,4 +91,9 @@ describe('calculateQueryCost', () => {
     const cost = calculateQueryCost('{ launches { ... on Launch { rocket { id } } } }');
     expect(cost).toBe(calculateQueryCost('{ launches { rocket { id } } }'));
   });
+
+  it('charges for every alias independently (guarding against alias explosion)', () => {
+    const query = '{ a: launches, b: launches, c: launches }';
+    expect(calculateQueryCost(query)).toBe(12);
+  });
 });

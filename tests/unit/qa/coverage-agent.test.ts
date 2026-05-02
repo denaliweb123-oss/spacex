@@ -28,6 +28,9 @@ const mockExistsSync = fs.existsSync as jest.Mock;
 const mockReadFileSync = fs.readFileSync as jest.Mock;
 const mockWriteFileSync = fs.writeFileSync as jest.Mock;
 
+beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => {}));
+afterEach(() => jest.restoreAllMocks());
+
 function setMemory(memory: object) {
   mockExistsSync.mockReturnValue(true);
   mockReadFileSync.mockReturnValue(JSON.stringify(memory));

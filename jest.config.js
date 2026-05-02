@@ -2,7 +2,7 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
-  testMatch: ['<rootDir>/tests/**/*.test.[jt]s'],
+  testMatch: ['<rootDir>/tests/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'mjs', 'json', 'node'],
   transformIgnorePatterns: [
     '/node_modules/(?!(msw|rettime|until-async|@open-draft/deferred-promise|headers-polyfill)/)'],

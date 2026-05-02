@@ -5,7 +5,7 @@ const resolvers: Resolvers = {
   Query: {
     capsules: async (obj, { find, offset, order, sort, limit }, context) => {
       const capsules = await context.api.getCapsules();
-      return applyLimitOffset({ data: capsules, limit, offset });
+      return applyLimitOffset({ data: capsules, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     capsulesPast: async (
       obj,
@@ -13,7 +13,7 @@ const resolvers: Resolvers = {
       context
     ) => {
       const capsules = await context.api.getCapsules();
-      return applyLimitOffset({ data: capsules, limit, offset });
+      return applyLimitOffset({ data: capsules, limit: limit ?? undefined, offset: offset ?? undefined });
     },
     capsulesUpcoming: async (
       obj,
