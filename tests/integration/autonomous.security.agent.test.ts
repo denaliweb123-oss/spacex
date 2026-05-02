@@ -5,7 +5,6 @@ import resolvers from "../../src/resolvers";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import API from "../../src/api";
 import { validationRules } from "../../src/graphql/security/validationRules";
-import depthLimit from "graphql-depth-limit";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 
 jest.mock("../../src/api", () => ({
@@ -45,12 +44,13 @@ jest.mock("../../src/api", () => ({
   })),
 }));
 
+// Scope: adversarial / abuse scenarios that go beyond deterministic rule checks.
+// Deterministic security rules (depth, complexity, introspection, rate limit) are
+// owned by tests/integration/security.test.ts and tests/unit/utils/depth-limit.test.ts.
 const typeDefs = gql(readFileSync("schema.graphql", { encoding: "utf-8" }));
 
 describe("🛡️ Security & Abuse Agent", () => {
   let server: ApolloServer;
-  let strictServer: ApolloServer;
-  let hardenedServer: ApolloServer;
   let authServer: ApolloServer;
   const ctx = { contextValue: { api: new API() } };
 
@@ -58,16 +58,6 @@ describe("🛡️ Security & Abuse Agent", () => {
     server = new ApolloServer({
       schema: buildSubgraphSchema({ typeDefs, resolvers }),
       validationRules,
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
-    strictServer = new ApolloServer({
-      schema: buildSubgraphSchema({ typeDefs, resolvers }),
-      validationRules: [depthLimit(6)],
-      plugins: [ApolloServerPluginInlineTraceDisabled()],
-    });
-    hardenedServer = new ApolloServer({
-      schema: buildSubgraphSchema({ typeDefs, resolvers }),
-      introspection: false,
       plugins: [ApolloServerPluginInlineTraceDisabled()],
     });
     authServer = new ApolloServer({
@@ -84,7 +74,7 @@ describe("🛡️ Security & Abuse Agent", () => {
   });
 
   afterAll(async () => {
-    await Promise.all([server, strictServer, hardenedServer, authServer].map(s => s.stop()));
+    await Promise.all([server, authServer].map(s => s.stop()));
   });
 
   it("rejects unknown fields (query injection attempt)", async () => {
@@ -92,43 +82,6 @@ describe("🛡️ Security & Abuse Agent", () => {
       { query: `{ __typename maliciousField }` },
       ctx
     );
-    expect((res.body as any).singleResult.errors).toBeDefined();
-  });
-
-  it("blocks deep query attack simulation", async () => {
-    const res = await strictServer.executeOperation(
-      {
-        query: `
-          query {
-            launchesPast {
-              rocket {
-                rocket {
-                  second_stage {
-                    payloads {
-                      composite_fairing {
-                        diameter {
-                          meters
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `,
-      },
-      ctx
-    );
-    const result = (res.body as any).singleResult;
-    expect(result.errors).toBeDefined();
-    expect(result.errors[0].message).toMatch(/exceeds maximum operation depth/i);
-  });
-
-  it("prevents schema introspection abuse in hardened mode", async () => {
-    const res = await hardenedServer.executeOperation({
-      query: `{ __schema { types { name } } }`,
-    });
     expect((res.body as any).singleResult.errors).toBeDefined();
   });
 

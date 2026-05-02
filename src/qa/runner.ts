@@ -1,4 +1,5 @@
 import { ApolloServer } from "@apollo/server";
+import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync, writeFileSync } from "fs";
 import gql from "graphql-tag";
@@ -22,14 +23,16 @@ export interface AutonomousQaOptions {
   writeMetrics?: boolean;
 }
 
-function buildQaServer(): ApolloServer {
+function buildQaSchema() {
   const schemaSDL = readFileSync("schema.graphql", "utf-8");
   const typeDefs = gql(schemaSDL);
+  return buildSubgraphSchema({ typeDefs, resolvers });
+}
 
-  const schema = buildSubgraphSchema({ typeDefs, resolvers });
-
+function buildQaServer(): ApolloServer {
   return new ApolloServer({
-    schema,
+    schema: buildQaSchema(),
+    plugins: [ApolloServerPluginInlineTraceDisabled()],
   });
 }
 
@@ -57,10 +60,11 @@ export async function replayFailure(failure: CoverageFailure): Promise<string | 
 }
 
 export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promise<AutonomousQaMetrics> {
-  const schemaSDL = readFileSync("schema.graphql", "utf-8");
-  const typeDefs = gql(schemaSDL);
-  const schema = buildSubgraphSchema({ typeDefs, resolvers });
-  const server = buildQaServer();
+  const schema = buildQaSchema();
+  const server = new ApolloServer({
+    schema,
+    plugins: [ApolloServerPluginInlineTraceDisabled()],
+  });
 
   const resolverFields = new Set(Object.keys(resolvers.Query ?? {}));
   const { queries, skippedFields } = generateQueries(schema, resolverFields);

@@ -230,6 +230,28 @@ describe('Launches — launchesPastResult resolver', () => {
   });
 });
 
+describe('Launch — LaunchRocketFirstStageCore.core resolver', () => {
+  it('fetches core by serial from parent', async () => {
+    const api = mockApi();
+    api.getLaunches.mockResolvedValue([{
+      id: 'abc',
+      name: 'Test',
+      rocket: {
+        first_stage: {
+          cores: [{ core_serial: 'B1049', flight: 1, reused: true }],
+        },
+      },
+    }] as any);
+    api.getCore.mockResolvedValue({ id: 'B1049', serial: 'B1049' } as any);
+    const res = await server.executeOperation(
+      { query: `{ launches { rocket { first_stage { cores { core { id } } } } } }` },
+      ctx(api)
+    );
+    expect((res.body as any).singleResult.errors).toBeUndefined();
+    expect(api.getCore).toHaveBeenCalledWith('B1049');
+  });
+});
+
 describe('Launch — field resolvers (branch coverage)', () => {
   it('maps launch_date_local from REST date_local', async () => {
     const api = mockApi();

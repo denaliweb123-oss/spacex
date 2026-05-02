@@ -41,20 +41,22 @@ jest.mock("../../src/api", () => {
 });
 
 describe("🤖 Autonomous GraphQL QA System", () => {
-  it("runs full AI QA cycle", async () => {
-    const metrics = await runAutonomousQA({ writeMetrics: false });
+  let metrics: Awaited<ReturnType<typeof runAutonomousQA>>;
 
-    expect(metrics.highSeverityAnomalies).toBe(0);
-    expect(metrics.anomalies.filter((anomaly) => anomaly.severity === "HIGH")).toEqual([]);
+  beforeAll(async () => {
+    metrics = await runAutonomousQA({ writeMetrics: false });
   }, 30000);
 
-  it("generates a query for every resolver field with no uncovered gaps", async () => {
-    const metrics = await runAutonomousQA({ writeMetrics: false });
+  it("runAutonomousQA — all resolvers mocked empty — reports zero HIGH severity anomalies", () => {
+    expect(metrics.highSeverityAnomalies).toBe(0);
+    expect(metrics.anomalies.filter((anomaly) => anomaly.severity === "HIGH")).toEqual([]);
+  });
 
+  it("generates a query for every resolver field with no uncovered gaps", () => {
     // skippedResolverFields are recorded when a type has no selectable scalar subfields.
     // If this list grows, add fixture scalar fields or document the skip explicitly.
     expect(metrics.skippedResolverFields).toEqual([]);
-  }, 30000);
+  });
 });
 
 describe("Autonomous failure memory replay", () => {
