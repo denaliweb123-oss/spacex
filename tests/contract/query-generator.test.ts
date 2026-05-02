@@ -10,7 +10,7 @@ const schema = buildSubgraphSchema({ typeDefs, resolvers });
 const resolverFields = new Set(Object.keys(resolvers.Query ?? {}));
 
 describe("Autonomous query generation", () => {
-  const queries = generateQueries(schema, resolverFields);
+  const { queries, skippedFields } = generateQueries(schema, resolverFields);
 
   it("generates queries for required-argument root fields", () => {
     expect(queries).toEqual(
@@ -27,5 +27,24 @@ describe("Autonomous query generation", () => {
     for (const query of queries) {
       expect(validate(schema, parse(query))).toEqual([]);
     }
+  });
+
+  it("selects multiple scalar fields per type, not just the first", () => {
+    // launches returns Launch which has id, mission_name, launch_date_utc, etc.
+    const launchesQuery = queries.find((q) => q.startsWith("{ launches"));
+    expect(launchesQuery).toBeDefined();
+    const selectionCount = (launchesQuery!.match(/\b\w+\b/g) ?? [])
+      .filter((t) => !["launches", "limit", "offset", "find", "order", "sort"].includes(t)).length;
+    expect(selectionCount).toBeGreaterThan(1);
+  });
+
+  it("covers every resolver field or records an explicit skip reason", () => {
+    const generatedFieldNames = new Set(
+      queries.map((q) => q.trim().replace(/^\{ /, "").split(/[\s(]/)[0])
+    );
+    const uncovered = [...resolverFields].filter(
+      (f) => !generatedFieldNames.has(f) && !skippedFields.includes(f)
+    );
+    expect(uncovered).toEqual([]);
   });
 });

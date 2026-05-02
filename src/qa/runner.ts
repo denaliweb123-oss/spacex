@@ -16,6 +16,8 @@ export interface AutonomousQaMetrics {
   highSeverityAnomalies: number;
   mediumSeverityAnomalies: number;
   anomalies: CoverageFailure[];
+  /** Root resolver fields skipped during query generation (no selectable scalar subfields). */
+  skippedResolverFields: string[];
 }
 
 export interface AutonomousQaOptions {
@@ -54,7 +56,7 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
   const server = buildQaServer();
 
   const resolverFields = new Set(Object.keys(resolvers.Query ?? {}));
-  const queries = generateQueries(schema, resolverFields);
+  const { queries, skippedFields } = generateQueries(schema, resolverFields);
 
   let totalQueriesExecuted = 0;
   let totalAnomaliesDetected = 0;
@@ -125,5 +127,6 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
   return {
     ...metrics,
     anomalies,
+    skippedResolverFields: skippedFields,
   };
 }
