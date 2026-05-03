@@ -1,7 +1,7 @@
 import { ApolloServer } from "@apollo/server";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import gql from "graphql-tag";
 import resolvers from "../resolvers";
 import API from "../api";
@@ -164,7 +164,18 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
     lastRun: new Date().toISOString(),
   };
   if (options.writeMetrics ?? false) {
-    writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
+    const historyPath = "qa-metrics.json";
+    let history: object[] = [];
+    if (existsSync(historyPath)) {
+      try {
+        const raw = JSON.parse(readFileSync(historyPath, "utf-8"));
+        // Handle legacy single-object format (pre-history migration) gracefully.
+        history = Array.isArray(raw) ? raw : [raw];
+      } catch {
+        history = [];
+      }
+    }
+    writeFileSync(historyPath, JSON.stringify([...history, metrics].slice(-10), null, 2));
   }
 
   return {

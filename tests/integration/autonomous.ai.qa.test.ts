@@ -44,7 +44,7 @@ describe("🤖 Autonomous GraphQL QA System", () => {
   let metrics: Awaited<ReturnType<typeof runAutonomousQA>>;
 
   beforeAll(async () => {
-    metrics = await runAutonomousQA({ writeMetrics: false });
+    metrics = await runAutonomousQA({ writeMetrics: process.env.CI === 'true' });
   }, 30000);
 
   it("runAutonomousQA — all resolvers mocked empty — reports zero HIGH severity anomalies", () => {
