@@ -2,6 +2,7 @@ import { ApolloServer } from "@apollo/server";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import { readFileSync, writeFileSync } from "fs";
+import { GraphQLSchema } from "graphql";
 import gql from "graphql-tag";
 import resolvers from "../resolvers";
 import API from "../api";
@@ -21,6 +22,12 @@ export interface AutonomousQaMetrics {
 
 export interface AutonomousQaOptions {
   writeMetrics?: boolean;
+  /**
+   * Pre-built executable schema to use instead of the default buildSubgraphSchema() call.
+   * Pass an auto-mocked schema (e.g. addMocksToSchema from @graphql-tools/mock) to run the
+   * QA cycle against realistic auto-generated data rather than the empty-array API mock.
+   */
+  schema?: GraphQLSchema;
 }
 
 function buildQaSchema() {
@@ -29,15 +36,15 @@ function buildQaSchema() {
   return buildSubgraphSchema({ typeDefs, resolvers });
 }
 
-function buildQaServer(): ApolloServer {
+function buildQaServer(schema?: GraphQLSchema): ApolloServer {
   return new ApolloServer({
-    schema: buildQaSchema(),
+    schema: schema ?? buildQaSchema(),
     plugins: [ApolloServerPluginInlineTraceDisabled()],
   });
 }
 
-export async function replayFailure(failure: CoverageFailure): Promise<string | null> {
-  const server = buildQaServer();
+export async function replayFailure(failure: CoverageFailure, opts: Pick<AutonomousQaOptions, "schema"> = {}): Promise<string | null> {
+  const server = buildQaServer(opts.schema);
   const start = Date.now();
   const res = await server.executeOperation(
     { query: failure.field },
@@ -60,7 +67,7 @@ export async function replayFailure(failure: CoverageFailure): Promise<string | 
 }
 
 export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promise<AutonomousQaMetrics> {
-  const schema = buildQaSchema();
+  const schema = options.schema ?? buildQaSchema();
   const server = new ApolloServer({
     schema,
     plugins: [ApolloServerPluginInlineTraceDisabled()],

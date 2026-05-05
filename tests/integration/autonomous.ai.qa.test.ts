@@ -1,53 +1,43 @@
+import { readFileSync } from "fs";
+import { addMocksToSchema } from "@graphql-tools/mock";
+import { buildSubgraphSchema } from "@apollo/subgraph";
+import { mockCustomScalars } from "@apollo/graphql-testing-library";
+import gql from "graphql-tag";
+
 import { replayFailure, runAutonomousQA } from "../../src/qa/runner";
 import { forgetFailure, readFailureMemory } from "../../src/qa/agents/coverage-agent";
 
-jest.mock("../../src/api", () => {
-  return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      getCapsules: () => Promise.resolve([]),
-      getCapsule: () => Promise.resolve(null),
-      company: () => Promise.resolve(null),
-      getCores: () => Promise.resolve([]),
-      getCore: () => Promise.resolve(null),
-      getDragons: () => Promise.resolve([]),
-      getDragon: () => Promise.resolve(null),
-      getHistoryEvents: () => Promise.resolve([]),
-      getHistoryEvent: () => Promise.resolve(null),
-      queryHistoryEvent: () => Promise.resolve([]),
-      getLandpads: () => Promise.resolve([]),
-      getLandpad: () => Promise.resolve(null),
-      getLaunches: () => Promise.resolve([]),
-      getPastLaunches: () => Promise.resolve([]),
-      getLaunch: () => Promise.resolve(null),
-      getLatestLaunch: () => Promise.resolve(null),
-      getUpcomingLaunchs: () => Promise.resolve([]),
-      getNextLaunch: () => Promise.resolve(null),
-      queryNextLaunch: () => Promise.resolve([]),
-      getRockets: () => Promise.resolve([]),
-      getRocket: () => Promise.resolve(null),
-      queryRocket: () => Promise.resolve(null),
-      getShips: () => Promise.resolve([]),
-      getShip: () => Promise.resolve(null),
-      queryShips: () => Promise.resolve(null),
-      getLaunchPads: () => Promise.resolve([]),
-      getLaunchPad: () => Promise.resolve(null),
-      getPayloads: () => Promise.resolve([]),
-      getPayload: () => Promise.resolve(null),
-      queryPayloads: () => Promise.resolve([]),
-      getRoadster: () => Promise.resolve(null),
-    })),
-  };
+// Build the production federation schema (handles @link / federation directives).
+// Then apply addMocksToSchema so every field returns an auto-generated value instead
+// of delegating to context.api. This is the in-process equivalent of passing
+// buildSubgraphSchema(...) to createHandlerFromSchema from @apollo/graphql-testing-library —
+// both internally use @graphql-tools/mock to populate all types with default values.
+//
+// mockCustomScalars supplies placeholder resolvers for the four custom scalars
+// (Date, ObjectID, timestamptz, uuid); without them @graphql-tools/mock throws
+// "No mock defined for type X" and every query containing those fields errors.
+//
+// The result: the QA cycle runs against realistic auto-generated data (non-null
+// strings, IDs, booleans) rather than the empty-array / null stubs from the
+// previous jest.mock of the API — a substantially stronger anomaly gate.
+const typeDefs = gql(readFileSync("schema.graphql", "utf-8"));
+const federationSchema = buildSubgraphSchema({ typeDefs, resolvers: {} });
+const autoMockedSchema = addMocksToSchema({
+  schema: federationSchema,
+  mocks: mockCustomScalars(federationSchema),
 });
 
 describe("🤖 Autonomous GraphQL QA System", () => {
   let metrics: Awaited<ReturnType<typeof runAutonomousQA>>;
 
   beforeAll(async () => {
-    metrics = await runAutonomousQA({ writeMetrics: false });
+    metrics = await runAutonomousQA({
+      writeMetrics: process.env.CI === "true",
+      schema: autoMockedSchema,
+    });
   }, 30000);
 
-  it("runAutonomousQA — all resolvers mocked empty — reports zero HIGH severity anomalies", () => {
+  it("runAutonomousQA — auto-mocked schema — reports zero HIGH severity anomalies", () => {
     expect(metrics.highSeverityAnomalies).toBe(0);
     expect(metrics.anomalies.filter((anomaly) => anomaly.severity === "HIGH")).toEqual([]);
   });
@@ -70,7 +60,7 @@ describe("Autonomous failure memory replay", () => {
     it.each(persistedFailures)(
       "replays and clears recovered failure %#",
       async (failure) => {
-        const anomaly = await replayFailure(failure);
+        const anomaly = await replayFailure(failure, { schema: autoMockedSchema });
 
         expect(anomaly).toBeNull();
         forgetFailure(failure);

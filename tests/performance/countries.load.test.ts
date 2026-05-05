@@ -1,7 +1,6 @@
 import { server } from '../mocks/msw.server';
-import { countriesHandlers, MOCK_COUNTRIES } from '../mocks/countries.handlers';
+import { countriesHandler, countriesHandlers, MOCK_COUNTRIES } from '../mocks/countries.handlers';
 import { CountriesService } from '../../src/services/CountriesService';
-import { graphql, HttpResponse } from 'msw';
 
 // Register Countries API handlers before each test.
 beforeEach(() => {
@@ -28,19 +27,20 @@ describe('CountriesService — latency', () => {
       name: `Country ${i}`,
     }));
 
-    const link = graphql.link('https://countries.trevorblades.com/');
-    server.use(
-      link.query('GetCountries', () =>
-        HttpResponse.json({ data: { countries: LARGE_DATASET } }),
-      ),
-    );
+    const revert = countriesHandler.withResolvers({
+      Query: { countries: () => LARGE_DATASET },
+    } as Parameters<typeof countriesHandler.withResolvers>[0]);
 
-    const start = Date.now();
-    const result = await svc.getCountries();
-    const duration = Date.now() - start;
+    try {
+      const start = Date.now();
+      const result = await svc.getCountries();
+      const duration = Date.now() - start;
 
-    expect(result).toHaveLength(250);
-    expect(duration).toBeLessThan(1000);
+      expect(result).toHaveLength(250);
+      expect(duration).toBeLessThan(1000);
+    } finally {
+      (revert as unknown as () => void)();
+    }
   });
 
   it('resolves 10 concurrent getCountries calls within 2000 ms', async () => {
@@ -56,6 +56,17 @@ describe('CountriesService — latency', () => {
     }
     expect(duration).toBeLessThan(2000);
   });
+
+  it('rejects with an AbortError when the upstream hangs past the timeout', async () => {
+    const revert = countriesHandler.replaceDelay('infinite');
+    // 150 ms timeout — fast enough that the test suite stays snappy.
+    const timedOutSvc = new CountriesService(undefined, 150);
+    try {
+      await expect(timedOutSvc.getCountries()).rejects.toThrow(/abort/i);
+    } finally {
+      (revert as unknown as () => void)();
+    }
+  }, 2000);
 
   it('resolves concurrent filtered queries (getContinents + getLanguages + getCountries) within 1500 ms', async () => {
     const start = Date.now();

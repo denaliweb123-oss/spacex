@@ -42,18 +42,28 @@ export interface Language {
 }
 
 export class CountriesService {
-  constructor(private readonly endpoint = ENDPOINT) {}
+  constructor(
+    private readonly endpoint = ENDPOINT,
+    private readonly timeoutMs = 5000,
+  ) {}
 
   private async gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-    const res = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables }),
-    });
-    const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
-    if (json.errors?.length) throw new Error(json.errors[0].message);
-    if (json.data == null) throw new Error('No data in response');
-    return json.data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables }),
+        signal: controller.signal,
+      });
+      const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
+      if (json.errors?.length) throw new Error(json.errors[0].message);
+      if (json.data == null) throw new Error('No data in response');
+      return json.data;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async getCountries(filter?: CountryFilter): Promise<Country[]> {
