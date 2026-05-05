@@ -1,7 +1,7 @@
 import { ApolloServer } from "@apollo/server";
 import { ApolloServerPluginInlineTraceDisabled } from "@apollo/server/plugin/disabled";
 import { buildSubgraphSchema } from "@apollo/subgraph";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { GraphQLSchema } from "graphql";
 import gql from "graphql-tag";
 import resolvers from "../resolvers";
@@ -23,6 +23,7 @@ export interface AutonomousQaMetrics {
 
 export interface AutonomousQaOptions {
   writeMetrics?: boolean;
+  printReport?: boolean;
   /**
    * Pre-built executable schema to use instead of the default buildSubgraphSchema() call.
    * Pass an auto-mocked schema (e.g. addMocksToSchema from @graphql-tools/mock) to run the
