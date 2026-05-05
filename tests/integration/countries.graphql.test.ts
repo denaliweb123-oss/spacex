@@ -1,5 +1,6 @@
+import { graphql, HttpResponse } from 'msw';
 import { server } from '../mocks/msw.server';
-import { countriesHandlers, MOCK_COUNTRIES, MOCK_CONTINENTS, MOCK_LANGUAGES } from '../mocks/countries.handlers';
+import { countriesHandler, countriesHandlers, MOCK_COUNTRIES, MOCK_CONTINENTS, MOCK_LANGUAGES } from '../mocks/countries.handlers';
 import { CountriesService } from '../../src/services/CountriesService';
 
 // Register Countries API handlers before each test.
@@ -234,22 +235,26 @@ describe('CountriesService — currency consistency', () => {
 // ─── Error handling ───────────────────────────────────────────────────────────
 
 describe('CountriesService — error handling', () => {
+  // withResolvers() returns the restore function directly (callable).
+  // Throwing in a resolver causes GraphQL to return { errors: [...] },
+  // which CountriesService maps to a thrown Error.
   it('throws when the API returns a GraphQL error', async () => {
-    const { graphql: mswGraphql, HttpResponse } = await import('msw');
-    const link = mswGraphql.link('https://countries.trevorblades.com/');
-    server.use(
-      link.query('GetCountries', () =>
-        HttpResponse.json({ errors: [{ message: 'internal server error' }] }),
-      ),
-    );
-    await expect(svc.getCountries()).rejects.toThrow('internal server error');
+    const revert = countriesHandler.withResolvers({
+      Query: { countries: () => { throw new Error('internal server error'); } },
+    } as Parameters<typeof countriesHandler.withResolvers>[0]);
+    try {
+      await expect(svc.getCountries()).rejects.toThrow('internal server error');
+    } finally {
+      (revert as unknown as () => void)();
+    }
   });
 
+  // withResolvers cannot produce a raw { data: null } payload (schema execution
+  // always returns a data envelope). server.use() with a raw HTTP response is
+  // the correct tool for testing this defensive path in CountriesService.gql().
   it('throws when the API returns null data', async () => {
-    const { graphql: mswGraphql, HttpResponse } = await import('msw');
-    const link = mswGraphql.link('https://countries.trevorblades.com/');
     server.use(
-      link.query('GetCountries', () =>
+      graphql.query('GetCountries', () =>
         HttpResponse.json({ data: null }),
       ),
     );

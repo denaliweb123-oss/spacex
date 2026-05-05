@@ -2,16 +2,43 @@ import { validate, parse, Source } from 'graphql';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { buildSubgraphSchema } from '@apollo/subgraph';
+import { addMocksToSchema } from '@graphql-tools/mock';
+import { mockCustomScalars } from '@apollo/graphql-testing-library';
+import { ApolloServer } from '@apollo/server';
+import { ApolloServerPluginInlineTraceDisabled } from '@apollo/server/plugin/disabled';
 import gql from 'graphql-tag';
 
+// ─── Schema + server setup ────────────────────────────────────────────────────
+// buildSubgraphSchema handles federation directives (@link).
+// addMocksToSchema replaces all resolvers with auto-generated values so each
+// query executes without a real API — every non-null field gets a mock value.
+// mockCustomScalars supplies resolvers for Date, ObjectID, timestamptz, uuid;
+// without them @graphql-tools/mock throws "No mock defined for type X".
+
 const SCHEMA_PATH = path.resolve(__dirname, '../../schema.graphql');
-const schema = buildSubgraphSchema({
-  typeDefs: gql(readFileSync(SCHEMA_PATH, 'utf-8')),
-  resolvers: {},
+const typeDefs = gql(readFileSync(SCHEMA_PATH, 'utf-8'));
+const federationSchema = buildSubgraphSchema({ typeDefs, resolvers: {} });
+const autoMockedSchema = addMocksToSchema({
+  schema: federationSchema,
+  mocks: mockCustomScalars(federationSchema),
 });
 
+// Validate-only schema (same build chain, no mocks needed for static checks).
+const validateSchema = federationSchema;
+
+let server: ApolloServer;
+beforeAll(() => {
+  server = new ApolloServer({
+    schema: autoMockedSchema,
+    plugins: [ApolloServerPluginInlineTraceDisabled()],
+  });
+});
+afterAll(() => server.stop());
+
+// ─── Assertion helpers ────────────────────────────────────────────────────────
+
 function assertValid(name: string, query: string): void {
-  const errors = validate(schema, parse(new Source(query, name)));
+  const errors = validate(validateSchema, parse(new Source(query, name)));
   if (errors.length > 0) {
     const details = errors.map(e => `  [COMPLIANCE ERROR] ${e.message}`).join('\n');
     throw new Error(`Production query breakage detected for "${name}":\n${details}`);
@@ -19,133 +46,152 @@ function assertValid(name: string, query: string): void {
   expect(errors).toHaveLength(0);
 }
 
-// ─── List resolvers ───────────────────────────────────────────────────────────
+async function assertExecutes(name: string, query: string): Promise<void> {
+  const res = await server.executeOperation({ query }, { contextValue: {} });
+  const result = (res.body as any).singleResult;
+  if (result.errors) {
+    const msgs = result.errors.map((e: any) => e.message).join('; ');
+    throw new Error(`Runtime execution failed for "${name}": ${msgs}`);
+  }
+  // data must be non-null — a null here means a non-nullable root field propagated null up,
+  // which indicates a type violation that parse+validate cannot detect.
+  expect(result.data).not.toBeNull();
+}
+
+async function assertContract(name: string, query: string): Promise<void> {
+  assertValid(name, query);
+  await assertExecutes(name, query);
+}
+
+// ─── List resolvers (16) ──────────────────────────────────────────────────────
 
 describe('Contract: list resolvers', () => {
-  it('launches', () => assertValid('GetLaunches',
+  it('launches', () => assertContract('GetLaunches',
     `query GetLaunches { launches(limit: 1) { id mission_name launch_date_utc launch_year } }`));
 
-  it('launchesPast', () => assertValid('GetLaunchesPast',
+  it('launchesPast', () => assertContract('GetLaunchesPast',
     `query GetLaunchesPast { launchesPast(limit: 1) { id mission_name launch_success } }`));
 
-  it('launchesUpcoming', () => assertValid('GetLaunchesUpcoming',
+  it('launchesUpcoming', () => assertContract('GetLaunchesUpcoming',
     `query GetLaunchesUpcoming { launchesUpcoming(limit: 1) { id mission_name launch_date_utc } }`));
 
-  it('capsules', () => assertValid('GetCapsules',
+  it('capsules', () => assertContract('GetCapsules',
     `query GetCapsules { capsules(limit: 1) { id status type reuse_count } }`));
 
-  it('capsulesPast', () => assertValid('GetCapsulesPast',
+  it('capsulesPast', () => assertContract('GetCapsulesPast',
     `query GetCapsulesPast { capsulesPast(limit: 1) { id status type } }`));
 
-  it('capsulesUpcoming', () => assertValid('GetCapsulesUpcoming',
+  it('capsulesUpcoming', () => assertContract('GetCapsulesUpcoming',
     `query GetCapsulesUpcoming { capsulesUpcoming(limit: 1) { id status type } }`));
 
-  it('cores', () => assertValid('GetCores',
+  it('cores', () => assertContract('GetCores',
     `query GetCores { cores(limit: 1) { id status reuse_count } }`));
 
-  it('coresPast', () => assertValid('GetCoresPast',
+  it('coresPast', () => assertContract('GetCoresPast',
     `query GetCoresPast { coresPast(limit: 1) { id status reuse_count } }`));
 
-  it('coresUpcoming', () => assertValid('GetCoresUpcoming',
+  it('coresUpcoming', () => assertContract('GetCoresUpcoming',
     `query GetCoresUpcoming { coresUpcoming(limit: 1) { id status } }`));
 
-  it('dragons', () => assertValid('GetDragons',
+  it('dragons', () => assertContract('GetDragons',
     `query GetDragons { dragons(limit: 1) { id name active } }`));
 
-  it('histories', () => assertValid('GetHistories',
+  it('histories', () => assertContract('GetHistories',
     `query GetHistories { histories(limit: 1) { id title details event_date_utc } }`));
 
-  it('landpads', () => assertValid('GetLandpads',
+  it('landpads', () => assertContract('GetLandpads',
     `query GetLandpads { landpads(limit: 1) { id full_name status landing_type } }`));
 
-  it('launchpads', () => assertValid('GetLaunchpads',
+  it('launchpads', () => assertContract('GetLaunchpads',
     `query GetLaunchpads { launchpads(limit: 1) { id name status attempted_launches } }`));
 
-  it('payloads', () => assertValid('GetPayloads',
+  it('payloads', () => assertContract('GetPayloads',
     `query GetPayloads { payloads(limit: 1) { id payload_type orbit } }`));
 
-  it('rockets', () => assertValid('GetRockets',
+  it('rockets', () => assertContract('GetRockets',
     `query GetRockets { rockets(limit: 1) { id name type active } }`));
 
-  it('ships', () => assertValid('GetShips',
+  it('ships', () => assertContract('GetShips',
     `query GetShips { ships(limit: 1) { id name type status home_port } }`));
 });
 
-// ─── Single-item resolvers ────────────────────────────────────────────────────
+// ─── Single-item resolvers (12) ───────────────────────────────────────────────
 
 describe('Contract: single-item resolvers', () => {
-  it('launch(id)', () => assertValid('GetLaunch',
+  it('launch(id)', () => assertContract('GetLaunch',
     `query GetLaunch { launch(id: "x") { id mission_name launch_date_utc launch_year launch_success } }`));
 
-  it('launchLatest', () => assertValid('GetLaunchLatest',
+  it('launchLatest', () => assertContract('GetLaunchLatest',
     `query GetLaunchLatest { launchLatest { id mission_name launch_date_utc } }`));
 
-  it('launchNext', () => assertValid('GetLaunchNext',
+  it('launchNext', () => assertContract('GetLaunchNext',
     `query GetLaunchNext { launchNext { id mission_name launch_date_utc } }`));
 
-  it('capsule(id)', () => assertValid('GetCapsule',
+  it('capsule(id)', () => assertContract('GetCapsule',
     `query GetCapsule { capsule(id: "x") { id status type reuse_count landings } }`));
 
-  it('core(id)', () => assertValid('GetCore',
+  it('core(id)', () => assertContract('GetCore',
     `query GetCore { core(id: "x") { id status reuse_count block water_landing } }`));
 
-  it('dragon(id)', () => assertValid('GetDragon',
+  it('dragon(id)', () => assertContract('GetDragon',
     `query GetDragon { dragon(id: "x") { id name active description } }`));
 
-  it('history(id)', () => assertValid('GetHistory',
+  it('history(id)', () => assertContract('GetHistory',
     `query GetHistory { history(id: "x") { id title details event_date_utc } }`));
 
-  it('landpad(id)', () => assertValid('GetLandpad',
+  it('landpad(id)', () => assertContract('GetLandpad',
     `query GetLandpad { landpad(id: "x") { id full_name status landing_type details } }`));
 
-  it('launchpad(id)', () => assertValid('GetLaunchpad',
+  it('launchpad(id)', () => assertContract('GetLaunchpad',
     `query GetLaunchpad { launchpad(id: "x") { id name status details attempted_launches successful_launches } }`));
 
-  it('payload(id)', () => assertValid('GetPayload',
+  it('payload(id)', () => assertContract('GetPayload',
     `query GetPayload { payload(id: "x") { id payload_type payload_mass_kg orbit nationality manufacturer } }`));
 
-  it('rocket(id)', () => assertValid('GetRocket',
+  it('rocket(id)', () => assertContract('GetRocket',
     `query GetRocket { rocket(id: "x") { id name type active description } }`));
 
-  it('ship(id)', () => assertValid('GetShip',
+  it('ship(id)', () => assertContract('GetShip',
     `query GetShip { ship(id: "x") { id name type status home_port active } }`));
 });
 
-// ─── Singleton resolvers ──────────────────────────────────────────────────────
+// ─── Singleton resolvers (2) ──────────────────────────────────────────────────
 
 describe('Contract: singleton resolvers', () => {
-  it('company', () => assertValid('GetCompany',
+  it('company', () => assertContract('GetCompany',
     `query GetCompany { company { name ceo coo cto founder founded employees valuation summary } }`));
 
-  it('roadster', () => assertValid('GetRoadster',
+  it('roadster', () => assertContract('GetRoadster',
     `query GetRoadster { roadster { name details launch_date_utc earth_distance_km mars_distance_km } }`));
 });
 
-// ─── Result-envelope resolvers ────────────────────────────────────────────────
+// ─── Result-envelope resolvers (4) ────────────────────────────────────────────
 
 describe('Contract: result-envelope resolvers', () => {
-  it('launchesPastResult', () => assertValid('GetLaunchesPastResult',
+  it('launchesPastResult', () => assertContract('GetLaunchesPastResult',
     `query GetLaunchesPastResult { launchesPastResult(limit: 1) { data { id mission_name } result { totalCount } } }`));
 
-  it('historiesResult', () => assertValid('GetHistoriesResult',
+  it('historiesResult', () => assertContract('GetHistoriesResult',
     `query GetHistoriesResult { historiesResult(limit: 1) { data { id title } result { totalCount } } }`));
 
-  it('rocketsResult', () => assertValid('GetRocketsResult',
+  it('rocketsResult', () => assertContract('GetRocketsResult',
     `query GetRocketsResult { rocketsResult(limit: 1) { data { id name } result { totalCount } } }`));
 
-  it('shipsResult', () => assertValid('GetShipsResult',
+  it('shipsResult', () => assertContract('GetShipsResult',
     `query GetShipsResult { shipsResult(limit: 1) { data { id name } result { totalCount } } }`));
 });
 
-// ─── Deprecated resolvers (still must parse and validate) ────────────────────
+// ─── Deprecated resolvers (3) ─────────────────────────────────────────────────
+// These fields are deprecated upstream but must still parse, validate, and execute
+// without errors — breaking them is a contract violation for existing clients.
 
 describe('Contract: deprecated resolvers', () => {
-  it('missions (deprecated)', () => assertValid('GetMissions',
+  it('missions (deprecated)', () => assertContract('GetMissions',
     `query GetMissions { missions(limit: 1) { id name description wikipedia } }`));
 
-  it('mission(id) (deprecated)', () => assertValid('GetMission',
+  it('mission(id) (deprecated)', () => assertContract('GetMission',
     `query GetMission { mission(id: "x") { id name description } }`));
 
-  it('missionsResult (deprecated)', () => assertValid('GetMissionsResult',
+  it('missionsResult (deprecated)', () => assertContract('GetMissionsResult',
     `query GetMissionsResult { missionsResult(limit: 1) { data { id name } result { totalCount } } }`));
 });

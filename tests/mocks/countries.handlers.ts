@@ -1,8 +1,73 @@
-import { graphql, HttpResponse } from 'msw';
-import type { Country, Continent, Language, StringFilter } from '../../src/services/CountriesService';
+import { createHandler } from '@apollo/graphql-testing-library';
+import gql from 'graphql-tag';
+import type { Country, Continent, Language, StringFilter, CountryFilter } from '../../src/services/CountriesService';
 
-const ENDPOINT = 'https://countries.trevorblades.com/';
-const link = graphql.link(ENDPOINT);
+// ─── Countries API SDL ────────────────────────────────────────────────────────
+// Mirrors the fields queried by CountriesService. createHandler builds an
+// executable schema from this SDL + resolvers below, replacing the previous
+// hand-rolled MSW graphql.link() request-middleware approach.
+
+const typeDefs = gql`
+  type Query {
+    countries(filter: CountryFilterInput): [Country!]!
+    continents(filter: ContinentFilterInput): [Continent!]!
+    languages(filter: LanguageFilterInput): [Language!]!
+  }
+
+  input StringQueryOperators {
+    eq: String
+    ne: String
+    in: [String]
+    nin: [String]
+    regex: String
+  }
+
+  input CountryFilterInput {
+    code: StringQueryOperators
+    currency: StringQueryOperators
+    continent: StringQueryOperators
+  }
+
+  input ContinentFilterInput {
+    code: StringQueryOperators
+  }
+
+  input LanguageFilterInput {
+    code: StringQueryOperators
+  }
+
+  type Country {
+    code: String!
+    name: String!
+    capital: String
+    currency: String
+    currencies: [String!]!
+    phone: String!
+    phones: [String!]!
+    emoji: String!
+    awsRegion: String!
+    continent: Continent!
+    languages: [Language!]!
+    states: [State!]!
+  }
+
+  type Continent {
+    code: String!
+    name: String!
+    countries: [Country!]!
+  }
+
+  type Language {
+    code: String!
+    name: String!
+    native: String!
+  }
+
+  type State {
+    code: String
+    name: String!
+  }
+`;
 
 // ─── Mock fixtures ────────────────────────────────────────────────────────────
 
@@ -42,7 +107,6 @@ export const MOCK_COUNTRIES: Country[] = [
     languages: [{ code: 'fr', name: 'French', native: 'Français' }],
     states: [],
   },
-  // Multi-currency country — used for bonus currency consistency tests
   {
     code: 'CU', name: 'Cuba', capital: 'Havana',
     currency: 'CUC,CUP', currencies: ['CUC', 'CUP'], phone: '53', phones: ['53'],
@@ -63,15 +127,15 @@ export const MOCK_COUNTRIES: Country[] = [
 
 export const MOCK_CONTINENTS: Continent[] = [
   { code: 'NA', name: 'North America', countries: [{ code: 'US', name: 'United States' }, { code: 'CA', name: 'Canada' }, { code: 'CU', name: 'Cuba' }] },
-  { code: 'EU', name: 'Europe', countries: [{ code: 'DE', name: 'Germany' }, { code: 'FR', name: 'France' }] },
-  { code: 'AS', name: 'Asia', countries: [{ code: 'JP', name: 'Japan' }] },
+  { code: 'EU', name: 'Europe',        countries: [{ code: 'DE', name: 'Germany' }, { code: 'FR', name: 'France' }] },
+  { code: 'AS', name: 'Asia',          countries: [{ code: 'JP', name: 'Japan' }] },
 ];
 
 export const MOCK_LANGUAGES: Language[] = [
-  { code: 'en', name: 'English', native: 'English' },
-  { code: 'fr', name: 'French', native: 'Français' },
-  { code: 'de', name: 'German', native: 'Deutsch' },
-  { code: 'es', name: 'Spanish', native: 'Español' },
+  { code: 'en', name: 'English',  native: 'English' },
+  { code: 'fr', name: 'French',   native: 'Français' },
+  { code: 'de', name: 'German',   native: 'Deutsch' },
+  { code: 'es', name: 'Spanish',  native: 'Español' },
   { code: 'ja', name: 'Japanese', native: '日本語' },
 ];
 
@@ -87,17 +151,20 @@ function matchesStringFilter(value: string | null | undefined, op: StringFilter)
   return true;
 }
 
-function filterCountries(countries: Country[], filter: Record<string, StringFilter> | undefined): Country[] {
+function applyCountryFilter(
+  countries: Country[],
+  filter: Record<string, StringFilter> | undefined,
+): Country[] {
   if (!filter) return countries;
   return countries.filter(c => {
-    if (filter['code']      && !matchesStringFilter(c.code, filter['code']))           return false;
-    if (filter['currency']  && !matchesStringFilter(c.currency, filter['currency']))   return false;
+    if (filter['code']      && !matchesStringFilter(c.code,           filter['code']))      return false;
+    if (filter['currency']  && !matchesStringFilter(c.currency,       filter['currency']))  return false;
     if (filter['continent'] && !matchesStringFilter(c.continent.code, filter['continent'])) return false;
     return true;
   });
 }
 
-function filterByCode<T extends { code: string }>(
+function applyCodeFilter<T extends { code: string }>(
   items: T[],
   filter: Record<string, StringFilter> | undefined,
 ): T[] {
@@ -105,21 +172,25 @@ function filterByCode<T extends { code: string }>(
   return items.filter(i => matchesStringFilter(i.code, filter['code']!));
 }
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+// ─── Schema-driven MSW handler ────────────────────────────────────────────────
+// Filter logic now lives in GraphQL resolvers (correct separation of concerns)
+// rather than in MSW HTTP request middleware. createHandler builds an executable
+// schema and returns an MSW handler that intercepts GraphQL operations.
 
-export const countriesHandlers = [
-  link.query('GetCountries', ({ variables }) => {
-    const filtered = filterCountries(MOCK_COUNTRIES, variables?.filter as any);
-    return HttpResponse.json({ data: { countries: filtered } });
-  }),
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const resolvers: Record<string, Record<string, (parent: any, args: any) => unknown>> = {
+  Query: {
+    countries: (_: unknown, { filter }: { filter?: CountryFilter }) =>
+      applyCountryFilter(MOCK_COUNTRIES, filter as Record<string, StringFilter>),
+    continents: (_: unknown, { filter }: { filter?: { code?: StringFilter } }) =>
+      applyCodeFilter(MOCK_CONTINENTS, filter as Record<string, StringFilter>),
+    languages: (_: unknown, { filter }: { filter?: { code?: StringFilter } }) =>
+      applyCodeFilter(MOCK_LANGUAGES, filter as Record<string, StringFilter>),
+  },
+};
 
-  link.query('GetContinents', ({ variables }) => {
-    const filtered = filterByCode(MOCK_CONTINENTS, variables?.filter as any);
-    return HttpResponse.json({ data: { continents: filtered } });
-  }),
+export const countriesHandler = createHandler({ typeDefs, resolvers });
 
-  link.query('GetLanguages', ({ variables }) => {
-    const filtered = filterByCode(MOCK_LANGUAGES, variables?.filter as any);
-    return HttpResponse.json({ data: { languages: filtered } });
-  }),
-];
+// MSW handler array — used with server.use(...countriesHandlers) in beforeEach.
+// createHandler returns a CustomRequestHandler directly — it is the MSW handler.
+export const countriesHandlers = [countriesHandler];
