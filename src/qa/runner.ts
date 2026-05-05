@@ -9,6 +9,7 @@ import API from "../api";
 
 import { generateQueries } from "./generators/query-generator";
 import type { CoverageFailure } from "./agents/coverage-agent";
+import { generateCIReport } from "./agents/coverage-agent";
 
 export interface AutonomousQaMetrics {
   totalQueriesExecuted: number;
@@ -155,6 +156,11 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
 
   await server.stop();
 
+  // Emit structured CI report when explicitly requested (not during normal test runs).
+  if (options.printReport ?? false) {
+    console.info('\n' + generateCIReport(anomalies) + '\n');
+  }
+
   const metrics = {
     totalQueriesExecuted,
     totalAnomaliesDetected,
@@ -163,7 +169,18 @@ export async function runAutonomousQA(options: AutonomousQaOptions = {}): Promis
     lastRun: new Date().toISOString(),
   };
   if (options.writeMetrics ?? false) {
-    writeFileSync("qa-metrics.json", JSON.stringify(metrics, null, 2));
+    const historyPath = "qa-metrics.json";
+    let history: object[] = [];
+    if (existsSync(historyPath)) {
+      try {
+        const raw = JSON.parse(readFileSync(historyPath, "utf-8"));
+        // Handle legacy single-object format (pre-history migration) gracefully.
+        history = Array.isArray(raw) ? raw : [raw];
+      } catch {
+        history = [];
+      }
+    }
+    writeFileSync(historyPath, JSON.stringify([...history, metrics].slice(-10), null, 2));
   }
 
   return {

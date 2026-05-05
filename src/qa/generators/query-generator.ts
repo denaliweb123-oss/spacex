@@ -8,6 +8,7 @@ import {
   isNonNullType,
 } from "graphql";
 import { fixtureLiteralForType } from "./argument-fixtures";
+import { DOMAIN_SEEDS } from "./domain-seeds";
 
 // Builds a nested selection for types that have no direct scalar fields (e.g. pagination
 // wrappers like HistoriesResult { result { totalCount } }). Returns undefined if no
@@ -35,10 +36,17 @@ export interface QueryGenerationResult {
   skippedFields: string[];
 }
 
-function buildArgumentList(args: readonly GraphQLArgument[]): string {
+function buildArgumentList(args: readonly GraphQLArgument[], fieldName: string): string {
   const requiredArgs = args.filter((arg) => isNonNullType(arg.type) && arg.defaultValue === undefined);
   if (requiredArgs.length === 0) return "";
-  const renderedArgs = requiredArgs.map((arg) => `${arg.name}: ${fixtureLiteralForType(arg.type)}`);
+  const renderedArgs = requiredArgs.map((arg) => {
+    // Use a real seed ID when available so the generator exercises the happy-path
+    // resolver branch (actual data returned) rather than always returning null on 404.
+    if (arg.name === "id" && fieldName in DOMAIN_SEEDS) {
+      return `${arg.name}: ${JSON.stringify(DOMAIN_SEEDS[fieldName])}`;
+    }
+    return `${arg.name}: ${fixtureLiteralForType(arg.type)}`;
+  });
   return `(${renderedArgs.join(", ")})`;
 }
 
@@ -68,7 +76,7 @@ export function generateQueries(schema: GraphQLSchema, resolverFields?: Set<stri
     if (resolverFields && !resolverFields.has(fieldName)) continue;
     const field = fields[fieldName];
 
-    const argumentList = buildArgumentList(field.args);
+    const argumentList = buildArgumentList(field.args, fieldName);
     const namedType = getNamedType(field.type);
 
     if (isObjectType(namedType)) {

@@ -19,8 +19,8 @@ npm test           # Run all Jest tests
 
 **Run a single test file:**
 ```bash
-npm test -- src/__tests__/repo.test.ts
-npm test -- src/__tests__/autonomous/security.agent.test.ts
+npm test -- tests/unit/resolvers/repo.test.ts
+npm test -- tests/integration/autonomous.security.agent.test.ts
 ```
 
 **Run tests by name pattern:**
@@ -68,14 +68,17 @@ Each request receives a `DataSourceContext` (defined in [src/types/DataSourceCon
 - [src/qa/agents/coverage-agent.ts](src/qa/agents/coverage-agent.ts) — records failures for CI artifact upload.
 - [src/qa/memory/qa-memory.json](src/qa/memory/qa-memory.json) — persists QA state between runs.
 
+Called by `tests/integration/autonomous.ai.qa.test.ts`.
+
 ## Testing (Standardized Structure)
 
 Tests use Jest with `ts-jest`. All test files live under the top-level `tests/` directory.
 
-- **Integration Tests (`tests/integration/`):** `launches.integration.test.ts`, `full-query-flow.test.ts`, `nplusone.test.ts`.
-- **Unit Tests (`tests/unit/`):** `api.test.ts`, `resolvers/launches.test.ts`.
-- **Contract Tests (`tests/contract/`):** `schema.diff.test.ts`, `query.compliance.test.ts`.
-- **Performance Tests (`tests/performance/`):** `load.test.ts`.
+- **Unit Tests (`tests/unit/`):** `resolvers/launches.test.ts`, `services/parse-service.test.ts`, `utils/depth-limit.test.ts`, `utils/complexity.test.ts`, `utils/rate-limit.test.ts`, `qa/runner.anomaly.test.ts`, `qa/runner.writemetrics.test.ts`, `qa/replay-failure.test.ts`.
+- **Integration Tests (`tests/integration/`):** `graphql.api.test.ts`, `errors.test.ts`, `security.test.ts`, `caching.test.ts`, `nplusone.test.ts`, `deprecated.test.ts`, `api.test.ts`, `autonomous.ai.qa.test.ts`.
+- **Contract Tests (`tests/contract/`):** `schema.diff.test.ts`, `query.compliance.test.ts`, `contract.agent.test.ts`.
+- **E2E Tests (`tests/e2e/`):** `full.graphql.flow.test.ts`.
+- **Performance Tests (`tests/performance/`):** `query.load.test.ts`, `countries.load.test.ts`.
 
 ## Test Strategy
 

@@ -14,12 +14,19 @@ describe("E2E: Full GraphQL Flow", () => {
 
   it("executes a launches query end-to-end via MSW-intercepted REST API", async () => {
     const res = await server.executeOperation(
-      { query: `{ launches { id mission_name } }` },
+      { query: `{ launches { id mission_name launch_year } }` },
       { contextValue }
     );
     const { data, errors } = (res.body as any).singleResult;
     expect(errors).toBeUndefined();
     expect(data.launches).toBeInstanceOf(Array);
+    expect(data.launches.length).toBeGreaterThan(0);
+    // Value assertions against pinned MSW fixture (tests/fixtures/launches.json)
+    const first = data.launches[0];
+    expect(typeof first.id).toBe("string");
+    expect(first.id.length).toBeGreaterThan(0);
+    expect(first.mission_name).toBe("FalconSat");
+    expect(first.launch_year).toBe("2006");
   });
 
   it("returns null for an unknown launch id", async () => {

@@ -25,6 +25,36 @@
 
 ---
 
+## Test coverage layers
+
+1. **Unit** — Resolver field-mapping (REST v4 field renames → GraphQL names), `parse-service` (weight derivation, field transforms), `limit-offset-service` (pagination edge cases), security middleware (depth, complexity, rate-limit rules in isolation), error masking, and autonomous QA agent behaviour (anomaly detection, failure recording, query generation). Includes `tests/unit/utils/argument-fixtures.test.ts` (unit tests for the QA generator's argument fixture helper).
+
+2. **Integration** — Full `Query → Resolver → Service → API` pipeline executed against MSW-intercepted REST responses. Covers happy path, error propagation, null handling, security rule enforcement (depth limit fires at depth 9, complexity limit fires, introspection blocked in production mode), response caching (`Cache-Control: max-age=86400`), N+1 detection, and autonomous anomaly detection. Also includes `tests/integration/deprecated.test.ts` — a regression guard for `@deprecated` fields (`Capsule.dragon`, `missions`, `mission`) ensuring they resolve to `null` without throwing and appear correctly in schema introspection.
+
+3. **Contract** — All 37 root Query fields validated as parse-and-validate queries against the built subgraph schema (`tests/contract/query.compliance.test.ts`). Schema SDL snapshot gate and breaking-change detection via `@graphql-inspector/core` diff against `origin/main` (`tests/contract/schema.diff.test.ts` — mirrors the CI `graphql-inspector diff` step and also runs locally). `tests/contract/query-generator.test.ts` validates that all schema-derived queries produced by the QA generator are syntactically and schema-valid; it tests the generator with the real production schema and lives in `contract/` because its assertions are contract-level (every generated query must validate).
+
+4. **E2E** — Full stack through MSW-intercepted REST. Launches query from GraphQL operation → Apollo Server → resolver → REST mock → response. Null propagation verified end-to-end (unknown ID → `null`, not an error).
+
+5. **Performance** — Concurrency floors validated in-process. SpaceX: 3 concurrent `launchesPast` queries complete under 2000 ms; 10 concurrent queries are all error-free. Countries (local only): single full-schema query with nested fields under 500 ms; 250-country dataset under 1000 ms; 10 concurrent requests under 2000 ms.
+
+6. **Autonomous QA** — Schema-derived queries generated at runtime using domain-aware fixture seeds (real launch IDs from `tests/fixtures/launches.json` substitute `"qa-fixture-id"` for resolvers with fixture coverage, so the happy-path resolver branch is exercised rather than always returning `null`). Queries are fuzzed with adversarial variants and executed against an in-process server. Any response exceeding the latency threshold (MEDIUM) or containing unexpected errors (HIGH) is flagged. Failures carry an optional `knownLimitation` field — when set, they are separated from real anomalies in the CI report and do not block the gate. Failures are persisted to `qa-memory.json` and replayed on every subsequent run until resolved. At the end of each run, `generateCIReport()` groups real failures by resolver name (so 5 failures from the same broken resolver surface as one root cause, not 5 independent anomalies) and separates documented known limitations. The `printReport: true` option enables this output; it defaults to `false` to keep test runs clean. Zero high-severity anomalies required to pass CI.
+
+---
+
+## Design principles
+
+**Shift-left** — Schema validation and unit tests run before integration, which runs before build. A type error or broken rule is caught in seconds, not after a multi-minute build.
+
+**Schema-first contract** — Production query shapes are validated against the local schema on every push. A field rename or type change that would break supergraph composition is caught before the schema reaches the registry.
+
+**Defense-in-depth** — Security enforced at three layers: validation (depth + complexity rules), resolver (null propagation, no data leakage), and API (error masking — stack traces never reach the client).
+
+**No live network in CI** — MSW intercepts all outbound HTTP. `tests/fixtures/launches.json` is version-pinned. Flakiness from upstream instability is structurally impossible, not managed by retry logic.
+
+**Continuous feedback** — Autonomous QA failure memory means a regression that appeared once will be retested on every subsequent run until it is explicitly resolved, not silently dropped.
+
+---
+
 ## Prioritized scenarios (top 5)
 
 Ranked by: likelihood of breakage × blast radius if broken.
@@ -139,3 +169,86 @@ The QA runner's `buildQaServer()` was not passing `ApolloServerPluginInlineTrace
 
 **External GraphQL API integration: Countries API**
 A typed service wrapper (`src/services/CountriesService.ts`) and MSW `graphql.link()` handlers (`tests/mocks/countries.handlers.ts`) were added to demonstrate and exercise the pattern for testing an external GraphQL API. The Countries test suite (`tests/integration/countries.graphql.test.ts`, `tests/performance/countries.load.test.ts`) covers 32 tests: basic query shape validation, all five filter operators (`eq`, `ne`, `in`, `nin`, `regex`), bonus currency consistency invariants (`Country.currency` ↔ `Country.currencies`), error propagation, and latency thresholds. All 32 tests are fully offline via MSW — no live network access required.
+
+**Contract coverage expanded: 1 query → 37 (all root Query fields)**
+`query.compliance.test.ts` previously validated a single production query (`GetLaunches`). The file was rewritten to cover all 37 root Query fields via `parse + validate` (no execution, no mocks). Grouped into five sections: list resolvers (16), single-item resolvers (12), singleton resolvers (2), result-envelope resolvers (4), deprecated resolvers (3). Each test catches field renames, type changes, or removals that would break a production query shape before the schema reaches the registry.
+
+**Schema diff added as a Jest test (`tests/contract/schema.diff.test.ts`)**
+Previously, breaking-change detection ran only as a CLI step in CI (`graphql-inspector diff`). A Jest test was added that (1) snapshots the SDL — any schema change fails until `--updateSnapshot` is run deliberately, and (2) diffs the current schema against `origin/main` using `@graphql-inspector/core`, failing on any `BREAKING` change. Skips gracefully when `origin/main` is unavailable (offline, fresh clone). Mirrors the CI CLI step so the gate runs locally too.
+
+**Self-healing compliance script (`scripts/heal-compliance.ts`, `npm run schema:heal`)**
+A ts-node script that regenerates `tests/contract/query.compliance.test.ts` from the current schema using `generateQueries()`. Run after a breaking schema change to restore a passing baseline, then review and re-add field-value assertions for priority resolvers before committing.
+
+**Domain seeds: query generator uses real fixture IDs**
+`src/qa/generators/domain-seeds.ts` reads `tests/fixtures/launches.json` at module load and exports `DOMAIN_SEEDS = { launch: "<real-id>" }`. `buildArgumentList` in `query-generator.ts` substitutes the real launch ID for the `id` argument of the `launch` resolver instead of `"qa-fixture-id"`. This causes the autonomous QA suite to exercise the happy-path resolver branch (actual data returned) rather than always hitting the null/404 branch. Other single-item resolvers (no fixture data) fall back to `"qa-fixture-id"` unchanged.
+
+**Failure clustering and CI report in coverage agent**
+Three new exports added to `coverage-agent.ts`: `extractResolver(field)` parses the resolver name from a query string; `clusterFailures(failures)` groups by resolver so 5 failures from one broken resolver surface as one root cause; `generateCIReport(failures)` produces a structured table separating real failures (grouped by resolver with HIGH/MEDIUM counts) from `knownLimitation` entries. The runner emits this report when `runAutonomousQA({ printReport: true })` is passed; defaults to `false` to keep test run output clean.
+
+**Known-limitation metadata in `CoverageFailure`**
+`CoverageFailure` gained an optional `knownLimitation?: string` field. When set, `recordFailure` emits `console.warn` instead of `console.error`, and `generateCIReport` moves the entry to an "ℹ️ Known limitations — not blocking CI" section separate from real anomalies.
+
+**N+1 coverage extended to ships**
+`nplusone.test.ts` previously had one test: rockets across launches (memoized — 3 launches × 1 rocket = 1 API call). A second test was added for ships, which have no memoization: 3 launches × 1 ship each = 3 `getShip` calls. The test documents the open N+1 risk for ships and acts as a regression gate — if a cache is added, the assertion changes to 1.
+
+**E2E test value assertions added**
+`tests/e2e/full.graphql.flow.test.ts` previously asserted only `data.launches` is an Array (shape-only). Added: `first.mission_name === "FalconSat"`, `first.launch_year === "2006"`, and `first.id` is a non-empty string — pinned against the MSW fixture.
+
+**CLAUDE.md file path references corrected**
+Five stale paths in the Testing section were corrected to match the actual file locations under `tests/`.
+
+---
+
+## Countries API — targeted test scenarios
+
+Three specific scenarios were required and are fully implemented. Each is documented below with its location, the risk it targets, and what makes it non-trivial.
+
+---
+
+### 1. Filter operators — `in`, `nin`, `regex` (and `eq`, `ne`)
+
+**File:** `tests/integration/countries.graphql.test.ts` → `describe('CountriesService — filter operators')`
+
+**Tests:**
+- `in`: returns only countries whose codes are in the set — validates that passing `{ code: { in: ["US", "CA"] } }` returns exactly those two countries and no others
+- `nin`: excludes countries whose codes are in the set — validates that `{ code: { nin: ["DE", "FR"] } }` omits both and returns the remainder
+- `regex`: returns countries whose currency matches the pattern — `{ currency: { regex: "^EUR$" } }` must return exactly DE and FR (both `EUR`), not CU (`CUC,CUP`)
+- `continent in / nin`: filter applied to a nested field (`continent.code`) rather than a root scalar, exercising the filter path through a relationship
+- `eq` and `ne` on both countries and the `getContinents` / `getLanguages` query types
+- Edge case: `in: []` (empty set) must return zero results, not all results
+
+**Why it matters:** The filter operators are the only variability axis the API exposes. A filter that silently returns all records instead of filtered ones (the most common implementation bug) would pass a simple shape test but fail here because result counts and codes are asserted exactly.
+
+**How the mock works:** The MSW `graphql.link()` handler receives the `variables.filter` object and runs the same operator logic (`eq`, `ne`, `in`, `nin`, `regex`) against the fixture dataset, so the service layer is genuinely exercising filter serialization and response mapping — not just receiving a hard-wired stub.
+
+---
+
+### 2. Performance / latency assertion on all-countries with nested fields
+
+**File:** `tests/performance/countries.load.test.ts` → `describe('CountriesService — latency')`
+
+**Tests:**
+- Single `getCountries()` call requesting `code name capital currency currencies phone phones emoji awsRegion continent { code name } languages { code name native } states { code name }` must complete in under **500 ms**
+- Same query against a synthetic 250-country dataset must complete in under **1000 ms** — validates that deserialization scales linearly rather than exponentially
+- **10 concurrent** `getCountries()` calls must all resolve within **2000 ms** — rules out a serialization bottleneck in the service layer
+- Mixed parallel fan-out (`getContinents` + `getLanguages` + filtered `getCountries` in `Promise.all`) must complete within **1500 ms** — validates that three simultaneous queries do not block each other
+
+**Why it matters:** Nested fields (`continent`, `languages`, `states`) multiply JSON payload size relative to a flat query. A service that processes response data with O(n²) field iteration would pass unit tests but fail the latency gate when all fields are requested at once.
+
+**What the threshold tests:** Because MSW intercepts at the network level in Node.js (near-zero latency), the measured time is dominated by JSON serialization, `fetch` API overhead, and any response-processing logic in `CountriesService.gql()`. The thresholds are tight enough to catch an accidental O(n) string copy per field but loose enough to survive GC pauses on a CI runner.
+
+---
+
+### 3. `Country.currency` ↔ `Country.currencies` consistency
+
+**File:** `tests/integration/countries.graphql.test.ts` → `describe('CountriesService — currency consistency')`
+
+**Tests:**
+- **Single-currency country** (`currency: "USD"`, `currencies: ["USD"]`): asserts `currency === currencies[0]` — the scalar and the array agree
+- **Multi-currency country** (`currency: "CUC,CUP"`, `currencies: ["CUC", "CUP"]`): asserts `currency === currencies.join(',')` — the scalar is the comma-joined encoding of the array
+- **Pinned real-world case — Cuba**: `currency.split(',')` must deep-equal `currencies` — validates both value equality and element order
+- **Dataset-wide invariant**: for every country in the response, `currency.split(',').length === currencies.length` — the comma-count in the scalar always matches the array length, with no off-by-one from trailing commas or empty segments
+
+**Why it matters:** `Country.currency` and `Country.currencies` are two representations of the same data returned by the same API. A client that uses `currencies` for display and `currency` for filtering (or vice versa) will produce wrong results if the two fields diverge. This scenario cannot be caught by a shape test (`toBeDefined`, `toBeInstanceOf(Array)`) — it requires asserting the semantic relationship between two fields on the same object.
+
+**The multi-currency case is the critical one:** For single-currency countries the relationship is trivially `===`. The bug surface is the comma-separated encoding for multi-currency countries, which is why Cuba (`CUC,CUP`) is pinned as a concrete example rather than relying on the dataset-wide invariant alone.
