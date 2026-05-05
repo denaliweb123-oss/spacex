@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Discord](https://img.shields.io/discord/1022972389463687228?logo=discord&logoColor=white&color=blue&style=flat&label=Discord)
 <!-- README_BADGES_START -->
-![Coverage](https://img.shields.io/badge/coverage-90.2%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-89.3%25-brightgreen)
 <!-- README_BADGES_END -->
 
 An Apollo Federation v2 subgraph that exposes SpaceX historical launch, rocket, capsule, ship, and payload data as a typed GraphQL API. Backed by the [r-spacex REST API](https://github.com/r-spacex/SpaceX-API). Try it live in [Apollo Explorer](https://studio.apollographql.com/public/spacex-l4uc6p/explorer?variant=main).
@@ -55,7 +55,7 @@ Cloud router: `https://main--spacex-pxxbxen.apollographos.net/graphql`
 ## Testing
 
 <!-- README_STATS_START -->
-This project uses a layered, seven-stage CI pipeline for GraphQL schema stability, runtime safety, and regression detection. All **323 tests** pass across **38 suites**; HTTP is fully mocked by MSW so no live network calls occur in CI.
+This project uses a layered, seven-stage CI pipeline for GraphQL schema stability, runtime safety, and regression detection. All **325 tests** pass across **38 suites**; HTTP is fully mocked by MSW so no live network calls occur in CI.
 <!-- README_STATS_END -->
 
 ### Test structure
@@ -114,10 +114,10 @@ Enforced as a hard gate in Stage 4:
 | Metric | Threshold | Current |
 |---|---:|---:|
 <!-- README_COVERAGE_START -->
-| Statements | 55% | 90.15% |
-| Branches   | 60% | 84.39% |
-| Functions  | 44% | 90.55% |
-| Lines      | 55% | 91.96% |
+| Statements | 55% | 89.32% |
+| Branches   | 60% | 84.37% |
+| Functions  | 44% | 90.05% |
+| Lines      | 55% | 91.18% |
 <!-- README_COVERAGE_END -->
 
 Excluded: `src/index.ts`, `src/qa/update-readme-metrics.ts`, `src/__generated__/`.
@@ -129,8 +129,8 @@ Excluded: `src/index.ts`, `src/qa/update-readme-metrics.ts`, `src/__generated__/
 **Autonomous QA — last 3 run(s):**
 | Run | Date | Queries | Anomalies | High |
 |---|---|---|---|---|
-| latest | 2026-05-03 | 185 | 0 | 0 |
-| -1 | 2026-05-03 | 185 | 0 | 0 |
+| latest | 2026-05-05 | 185 | 0 | 0 |
+| -1 | 2026-05-05 | 185 | 0 | 0 |
 | -2 | 2026-05-02 | 185 | 0 | 0 |
 <!-- AUTONOMOUS_QA_METRICS_END -->
 
