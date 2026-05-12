@@ -1,0 +1,202 @@
+⏺ All artifacts written. Here is the complete delivery.                                                                                
+                                                                                                                                       
+  ---                                                                                                                                  
+  Step 1 — Framework Inventory                                                                                                         
+                              
+  Queries (37 total across 14 domains)                                                                                                 
+                                                                                                                                     
+  ┌─────────────────────┬─────────────────────────────────┬───────────────────────────────────────┬───────────┬────────────────────┐   
+  │       Domain        │             Single              │                 List                  │ Paginated │   Result-wrapper   │
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Capsule             │ capsule(id)                     │ capsules / capsulesPast /             │ yes       │ —                  │   
+  │                     │                                 │ capsulesUpcoming                      │           │                    │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Core                │ core(id)                        │ cores / coresPast / coresUpcoming     │ yes       │ —                  │ 
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤ 
+  │ Dragon              │ dragon(id)                      │ dragons                               │ yes       │ —                  │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤
+  │ History             │ history(id)                     │ histories                             │ yes       │ historiesResult    │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Landpad/Launchpad   │ landpad(id), launchpad(id)      │ landpads, launchpads                  │ yes       │ —                  │ 
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Launch              │ launch(id), launchLatest,       │ launches / launchesPast /             │ yes       │ launchesPastResult │   
+  │                     │ launchNext                      │ launchesUpcoming                      │           │                    │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Mission             │ mission(id)                     │ missions                              │ yes       │ missionsResult     │   
+  │ (deprecated)        │                                 │                                       │           │                    │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Payload             │ payload(id)                     │ payloads                              │ yes       │ —                  │   
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Roadster            │ roadster                        │ —                                     │ —         │ —                  │ 
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Rocket              │ rocket(id)                      │ rockets                               │ yes       │ rocketsResult      │ 
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Ship                │ ship(id)                        │ ships                                 │ yes       │ shipsResult        │
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Company             │ company                         │ —                                     │ —         │ —                  │ 
+  ├─────────────────────┼─────────────────────────────────┼───────────────────────────────────────┼───────────┼────────────────────┤   
+  │ Users (Hasura)      │ users_by_pk                     │ users, users_aggregate                │ yes       │ —                  │
+  └─────────────────────┴─────────────────────────────────┴───────────────────────────────────────┴───────────┴────────────────────┘   
+                                                                                                                                     
+  Mutations                                                                                                                            
+                                                                                                                                     
+  delete_users, insert_users, update_users — Hasura-generated CRUD; no auth checks visible.                                            
+   
+  N+1 Risk Map                                                                                                                         
+                                                                                                                                     
+  ┌─────────────────────────────────┬───────────────────────────────┬──────────────────────┬───────────┐                               
+  │            Resolver             │        Upstream method        │      Mitigation      │  Status   │
+  ├─────────────────────────────────┼───────────────────────────────┼──────────────────────┼───────────┤                               
+  │ Launch.rocket                   │ api.getRocket                 │ In-request Map cache │ Mitigated │                             
+  ├─────────────────────────────────┼───────────────────────────────┼──────────────────────┼───────────┤                             
+  │ Launch.ships                    │ api.getShip per ship          │ None                 │ Known N+1 │                               
+  ├─────────────────────────────────┼───────────────────────────────┼──────────────────────┼───────────┤                               
+  │ LaunchRocketFirstStageCore.core │ api.getCore per core          │ None                 │ Known N+1 │                               
+  ├─────────────────────────────────┼───────────────────────────────┼──────────────────────┼───────────┤                               
+  │ History.flight                  │ api.queryNextLaunch per event │ None                 │ Known N+1 │                               
+  └─────────────────────────────────┴───────────────────────────────┴──────────────────────┴───────────┘                               
+                                                                                                                                     
+  Parse-Layer Risk Areas (src/parse-service.ts)                                                                                        
+                                                                                                                                     
+  ┌───────────────────┬─────────────────────────────────────────────────────────────┬──────────────────────────────────────────────┐   
+  │     Function      │                   REST key → GraphQL key                    │                     Risk                     │ 
+  ├───────────────────┼─────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤   
+  │ parseShip         │ ship_id→id, ship_name→name, ship_model→model,               │ Silently returns undefined if REST key       │ 
+  │                   │ ship_type→type                                              │ renamed                                      │
+  ├───────────────────┼─────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤   
+  │ parseLaunchpad    │ full_name→name, drops padid                                 │ Mutation of pad object in-place is fragile   │   
+  ├───────────────────┼─────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤   
+  │ parseMissions     │ mission_id→id, mission_name→name                            │ Same rename risk                             │   
+  ├───────────────────┼─────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤ 
+  │ Launch.links      │ article→article_link, webcast→video_link,                   │ Deeply nested object access — null at any    │   
+  │ (inline)          │ flickr.original→flickr_images, reddit.*→reddit_*            │ level crashes without optional chaining      │ 
+  └───────────────────┴─────────────────────────────────────────────────────────────┴──────────────────────────────────────────────┘   
+                                                                                                                                     
+  Authorization Surface
+
+  None. No @auth directives, no role checks, no token validation in any resolver. The only security layer is depth/complexity limiting 
+  in validationRules.ts. This is documented as a gap below.
+                                                                                                                                       
+  ---                                                                                                                                  
+  Step 2 — Agentic Architecture Proposal
+                                                                                                                                       
+  flowchart TD                                                                                                                       
+      subgraph L1["Layer 1 · AI Test Generator"]
+          SDL["schema.graphql\n(source of truth)"]                                                                                     
+          GEN["Stub Generator\n(SDL → Jest files)"]                                                                                    
+          HAPPY["Happy-path variants"]                                                                                                 
+          EDGE["Edge-case variants\n(null, [], pagination)"]                                                                           
+          SDL --> GEN --> HAPPY & EDGE --> OUT["src/__tests__/generated/*.test.ts"]                                                    
+      end                                                                                                                              
+                                                                                                                                     
+      subgraph L2["Layer 2 · Self-Healing Engine"]                                                                                     
+          FAIL["Test failure"] --> CLASS["Failure Classifier\n(6 categories)"]                                                       
+          CLASS -->|schema_drift| PATCH["Auto-patch snapshot\nopen PR via gh cli"]                                                     
+          CLASS -->|resolver_bug| RPT["HEALING_REPORT.md"]                                                                             
+          CLASS -->|upstream_change| RPT                                                                                               
+          CLASS -->|parse_layer| RPT                                                                                                   
+          CLASS -->|performance| RPT                                                                                                   
+      end                                                                                                                              
+                                                                                                                                     
+      subgraph L3["Layer 3 · Cloud Sandbox Executor"]                                                                                  
+          SRV["In-memory ApolloServer\n+ addMocksToSchema"]                                                                          
+          ISO["Per-entity isolated context"]                                                                                           
+          JSON["qa-failure-report.json"]                                                                                               
+          SRV --> ISO --> JSON                                                                                                         
+      end                                                                                                                              
+                                                                                                                                     
+      OUT --> SRV
+      JSON --> CLASS
+      JSON --> CI                                                                                                                      
+   
+      subgraph CI["GitHub Actions (.github/workflows/autonomous-qe.yml)"]                                                              
+          J1["1 · Schema Lint\n(every push)"]                                                                                        
+          J2["2 · Contract + Diff\n(every push)"]                                                                                      
+          J3["3 · Null Handling\n(every push)"]                                                                                      
+          J4["4 · N+1 Gate\n(PRs only)"]                                                                                               
+          J5["5 · Autonomous QA\n(every push, artifact upload on main)"]                                                             
+          J6["6 · Auth Audit\n(weekly Monday cron)"]                                                                                   
+          J7["7 · Self-Healing PR Bot\n(main failure only)"]                                                                           
+          J1 --> J2 & J3 & J4                                                                                                          
+          J2 & J3 --> J5                                                                                                               
+          J5 -->|failure on main| J7                                                                                                   
+      end                                                                                                                              
+   
+  ---                                                                                                                                  
+  Step 3 — Test Templates (written to src/__tests__/generated/)                                                                      
+                                                                                                                                       
+  contract.snapshot.test.ts
+                                                                                                                                       
+  - Full SDL toMatchSnapshot() gate                                                                                                    
+  - Field-presence table for all 11 entity id fields
+  - Parse-layer rename guards: asserts schema exposes article_link not article, video_link not webcast, etc.                           
+  - Deprecated-query retention guard (mission, missions, missionsResult)                                                               
+                                                                                                                                       
+  nplusone.proxy.test.ts                                                                                                               
+                                                                                                                                       
+  - makeCallCounterProxy() — transparent Proxy that increments counts[methodName] on every call                                        
+  - Budget=1: Launch.rocket memoization (in-request Map) — asserts getRocket called exactly once for 3 launches sharing the same ID
+  - Budget=distinct: Two different rocket IDs → 2 calls                                                                                
+  - Known N+1 documented: Launch.ships (budget=3), History.flight (budget=2), LaunchRocketFirstStageCore.core (budget=2)             
+                                                                                                                                       
+  null.handling.test.ts                                                                                                              
+                                                                                                                                       
+  - 5 empty-list scenarios (ships, launches, histories, dragons, rockets)                                                              
+  - 4 null single-entity scenarios (ship, launch, company, roadster)
+  - 3 null nested-object scenarios (Launch.links, Launch.ships, Launch.rocket)                                                         
+  - 4 pagination edge cases (limit=0, offset>total, limit>size)                                                                        
+  - 3 parse-service null-input guards (weight nulls, kg-only derivation, null item in array filtered)                                  
+                                                                                                                                       
+  failure.report.test.ts                                                                                                               
+                                                                                                                                       
+  - Runs the full runAutonomousQA cycle against addMocksToSchema                                                                       
+  - categorizeFailure() maps each CoverageFailure → { category, file, diagnosis, suggestedFix }
+  - Writes qa-failure-report.json and HEALING_REPORT.md to cwd()                                                                       
+  - Asserts report structure, category enum, zero non-performance failures                                                             
+                                                                                                                                       
+  ---                                                                                                                                  
+  Step 4 — CI/CD Pipeline (.github/workflows/autonomous-qe.yml)                                                                        
+                                                                                                                                     
+  ┌─────────────────────┬────────────────────────┬──────────────────────────────────────────────────────────────┐
+  │         Job         │        Trigger         │                     Hard-fail condition                      │                      
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Schema Lint         │ Every push             │ graphql-schema-linter rule violation                         │                      
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                    
+  │ Contract + Diff     │ Every push             │ Breaking change vs origin/main; snapshot mismatch            │                      
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                      
+  │ Null Handling       │ Every push             │ Any null-handling test failure                               │                      
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                      
+  │ N+1 Gate            │ PRs only               │ Call count exceeds documented budget                         │                    
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                      
+  │ Autonomous QA       │ Every push             │ HIGH-severity anomaly; report artifact uploaded on main      │
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                      
+  │ Auth Audit          │ Weekly (Mon 08:00 UTC) │ Advisory only; uploads auth-audit-report.json                │                    
+  ├─────────────────────┼────────────────────────┼──────────────────────────────────────────────────────────────┤                      
+  │ Self-Healing PR Bot │ main failure           │ Opens PR with regenerated snapshots + HEALING_REPORT.md body │                    
+  └─────────────────────┴────────────────────────┴──────────────────────────────────────────────────────────────┘                      
+                                                                                                                                     
+  ---                                                                                                                                  
+  Step 5 — Remaining Gaps (requires human implementation)                                                                            
+                                                                                                                                       
+  ┌───────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │          Gap          │                                             What's needed                                              │   
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+  │ Actual AI model for   │ Job 7 runs --updateSnapshot mechanically. True healing (e.g., inferring the correct field mapping from │
+  │ self-healing          │  a schema diff) requires an LLM call — integrate via @anthropic-ai/sdk in a custom script              │
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤   
+  │ DataLoader for ships  │ Launch.ships is a documented N+1. The proxy test will catch any fix; the DataLoader itself is not in   │
+  │                       │ scope here                                                                                             │   
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+  │ Auth layer            │ No auth exists. The weekly audit identifies sensitive fields (twitter, etc.) but there is nothing to   │   
+  │                       │ protect against. If auth is added, annotate resolvers with @auth and extend validationRules.ts         │   
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Cloud sandbox         │ Job 5 runs in the GitHub Actions runner. True isolation per entity (separate VMs/containers) requires  │   
+  │ provisioning          │ Kubernetes or AWS Batch — not modelled here                                                            │   
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Real upstream API     │ The QA cycle mocks everything. A nightly run against the live api.spacexdata.com would catch upstream  │   
+  │ contract              │ drift before it reaches production                                                                     │   
+  ├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ PR label creation     │ autonomous-qe and schema-drift labels must be created in the GitHub repo settings before Job 7's gh pr │   
+  │                       │  create --label call succeeds                                                                          │   
+  └───────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                   

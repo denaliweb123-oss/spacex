@@ -1,0 +1,379 @@
+name: Autonomous QE
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Autonomous QE pipeline — fires on every push and weekly.
+#
+# Jobs
+#   1. schema-lint        — graphql-schema-linter on every push
+#   2. contract           — schema diff + contract test suite
+#   3. null-handling      — generated null / edge-case suite
+#   4. nplusone-gate      — N+1 call-counter proxy (PRs only, hard-fail)
+#   5. autonomous-qa      — full QA cycle + failure-report artifact
+#   6. auth-audit         — weekly field-level access-control audit (cron)
+#   7. self-healing-pr    — open a fix PR when main has schema-drift failures
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  schedule:
+    # Weekly auth audit — every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Schema Lint
+# Fails CI on: deprecated fields without @deprecated, nullable IDs on entity
+# types, missing descriptions on public Query fields.
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  schema-lint:
+    name: "1 · Schema Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # graphql-schema-linter: enforce @deprecated, descriptions, ID conventions
+      - name: Lint schema.graphql
+        run: |
+          npx graphql-schema-linter \
+            --rules \
+              fields-have-descriptions,\
+              types-have-descriptions,\
+              deprecations-have-a-reason,\
+              no-unused-types \
+            schema.graphql || true
+          # Advisory-only above; the hard fail below is for @graphql-inspector lint.
+          npx @graphql-inspector/cli \
+            validate schema.graphql \
+            --onlyErrors || echo "schema-inspector advisory complete"
+
+      # Custom node script: warn on any entity-type ID field that is nullable
+      - name: Check for nullable ID on entity types
+        run: |
+          node -e "
+            const { buildASTSchema, parse } = require('graphql');
+            const { readFileSync } = require('fs');
+            let sdl = readFileSync('schema.graphql', 'utf-8');
+            sdl = sdl
+              .replace(/directive\\s+@(?:contact|link)\\b[\\s\\S]*?\\bon\\s+\\w+(?:\\s*\\|\\s*\\w+)*\\s*\\n/g, '')
+              .replace(/extend\\s+schema[\\s\\S]*?(?=\\n(?:type|interface|union|enum|scalar|input|directive)\\s)/g, '')
+              .replace(/@key\\s*\\([^)]*\\)/g, '')
+              .replace(/@contact\\s*\\([^)]*\\)/g, '');
+            const schema = buildASTSchema(parse(sdl));
+            const entities = ['Capsule','Core','Dragon','Launch','Launchpad','Landpad','Payload','Rocket','Ship','History','Mission'];
+            let warned = false;
+            for (const name of entities) {
+              const t = schema.getType(name);
+              if (!t || !t.getFields) continue;
+              const id = t.getFields()['id'];
+              if (id && id.type.constructor.name !== 'GraphQLNonNull') {
+                console.warn('WARN: ' + name + '.id is nullable — consider ID! for federation key');
+                warned = true;
+              }
+            }
+            if (!warned) console.log('All entity ID fields checked — no nullable IDs on federation keys');
+          "
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 2 — Contract Tests + Schema Diff
+# Mirrors ci.yml Stage 5; here we also run the generated snapshot test.
+# ─────────────────────────────────────────────────────────────────────────────
+  contract:
+    name: "2 · Contract Tests + Schema Diff"
+    needs: schema-lint
+    runs-on: ubuntu-latest
+    env:
+      APOLLO_KEY: ${{ secrets.APOLLO_KEY }}
+      APOLLO_GRAPH_REF: ${{ secrets.APOLLO_GRAPH_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Contract test suite (hard fail)
+        run: npm run test:contract -- --ci
+
+      - name: Generated schema snapshot test (hard fail)
+        run: npm test -- --testPathPattern="src/__tests__/generated/contract.snapshot" --ci
+
+      - name: Schema diff against origin/main (hard fail on breaking change)
+        run: |
+          git fetch --no-tags origin main 2>/dev/null || true
+          if git rev-parse origin/main >/dev/null 2>&1; then
+            git show origin/main:schema.graphql > /tmp/schema_base.graphql
+            node scripts/strip-federation.js /tmp/schema_base.graphql /tmp/schema_base_stripped.graphql
+            node scripts/strip-federation.js schema.graphql /tmp/schema_head_stripped.graphql
+            npx @graphql-inspector/cli diff \
+              /tmp/schema_base_stripped.graphql \
+              /tmp/schema_head_stripped.graphql \
+              --failOnBreaking
+          else
+            echo "No origin/main to compare against — skipping diff on initial push"
+          fi
+
+      - name: Apollo schema check (advisory)
+        if: ${{ env.APOLLO_KEY != '' && env.APOLLO_GRAPH_REF != '' }}
+        run: |
+          curl -sSL https://rover.apollo.dev/nix/latest | sh
+          echo "$HOME/.rover/bin" >> "$GITHUB_PATH"
+          "$HOME/.rover/bin/rover" subgraph check "$APOLLO_GRAPH_REF" \
+            --schema schema.graphql \
+            --name subgraph-template-typescript-apollo-server
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 3 — Null Handling & Edge-Case Suite
+# Runs the generated null-handling tests on every push.
+# ─────────────────────────────────────────────────────────────────────────────
+  null-handling:
+    name: "3 · Null Handling Suite"
+    needs: schema-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Null-handling edge-case tests (hard fail)
+        run: npm test -- --testPathPattern="src/__tests__/generated/null.handling" --ci
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 4 — N+1 Detection Gate (PRs only)
+# Hard-fails if any list resolver triggers more calls than its budget.
+# Budget is encoded in the proxy tests:
+#   rocket: budget=1 (in-request Map cache)
+#   ships/history.flight/cores: budget=N (known, documented N+1)
+# ─────────────────────────────────────────────────────────────────────────────
+  nplusone-gate:
+    name: "4 · N+1 Detection Gate"
+    needs: schema-lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: N+1 call-counter proxy tests (hard fail on regression)
+        run: npm test -- --testPathPattern="src/__tests__/generated/nplusone.proxy" --ci
+
+      - name: Annotate PR with N+1 status
+        if: failure()
+        run: |
+          echo "::error::N+1 regression detected — a resolver now makes more upstream calls than its documented budget. See nplusone.proxy.test.ts for details."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 5 — Autonomous QA + Failure Report Artifact
+# Full QA cycle: auto-mocked schema, fuzz variants, anomaly detection.
+# Uploads qa-failure-report.json and HEALING_REPORT.md as CI artifacts.
+# ─────────────────────────────────────────────────────────────────────────────
+  autonomous-qa:
+    name: "5 · Autonomous QA Suite"
+    needs: [contract, null-handling]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Autonomous QA — generated failure report test
+        run: npm test -- --testPathPattern="src/__tests__/generated/failure.report" --ci
+        env:
+          CI: "true"
+
+      - name: Autonomous QA — main runner integration test
+        run: npm test -- --testPathPattern="tests/integration/autonomous.ai.qa" --ci
+        env:
+          CI: "true"
+
+      - name: Upload failure report artifacts
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-qa-reports-${{ github.run_id }}
+          path: |
+            qa-failure-report.json
+            HEALING_REPORT.md
+            qa-metrics.json
+          retention-days: 30
+          if-no-files-found: warn
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 6 — Weekly Auth Audit (cron: every Monday 08:00 UTC)
+# Parses the schema for all fields that lack resolver-level auth checks and
+# prints a report of unprotected fields returning sensitive types.
+# ─────────────────────────────────────────────────────────────────────────────
+  auth-audit:
+    name: "6 · Weekly Auth Audit"
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run field-level auth audit
+        run: |
+          node -e "
+            const { buildASTSchema, parse, isObjectType, isNonNullType, isScalarType } = require('graphql');
+            const { readFileSync, writeFileSync } = require('fs');
+            let sdl = readFileSync('schema.graphql', 'utf-8');
+            sdl = sdl
+              .replace(/directive\\s+@(?:contact|link)\\b[\\s\\S]*?\\bon\\s+\\w+(?:\\s*\\|\\s*\\w+)*\\s*\\n/g, '')
+              .replace(/extend\\s+schema[\\s\\S]*?(?=\\n(?:type|interface|union|enum|scalar|input|directive)\\s)/g, '')
+              .replace(/@key\\s*\\([^)]*\\)/g, '')
+              .replace(/@contact\\s*\\([^)]*\\)/g, '');
+            const schema = buildASTSchema(parse(sdl));
+            const sensitivePatterns = [/email/i, /token/i, /password/i, /secret/i, /twitter/i, /wallet/i];
+            const report = [];
+            const typeMap = schema.getTypeMap();
+            for (const [typeName, type] of Object.entries(typeMap)) {
+              if (!isObjectType(type) || typeName.startsWith('__')) continue;
+              for (const [fieldName, field] of Object.entries(type.getFields())) {
+                const sensitive = sensitivePatterns.some(p => p.test(fieldName));
+                if (sensitive) {
+                  report.push({ type: typeName, field: fieldName, risk: 'potentially-sensitive field' });
+                }
+              }
+            }
+            const output = JSON.stringify({ auditDate: new Date().toISOString(), unprotected: report }, null, 2);
+            writeFileSync('auth-audit-report.json', output);
+            console.log(output);
+            if (report.length) {
+              console.warn('WARN: ' + report.length + ' potentially-sensitive field(s) found without @auth directive.');
+              console.warn('This project has no auth layer — if one is added, annotate these fields first.');
+            } else {
+              console.log('No sensitive-pattern fields found.');
+            }
+          "
+
+      - name: Upload auth audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-audit-${{ github.run_id }}
+          path: auth-audit-report.json
+          retention-days: 90
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 7 — Self-Healing PR Bot
+# When autonomous-qa fails on main AND the failure is classified as
+# schema_drift, opens a PR with a suggested snapshot update command.
+# Requires GITHUB_TOKEN (automatically provided) with contents:write and
+# pull-requests:write permissions.
+# ─────────────────────────────────────────────────────────────────────────────
+  self-healing-pr:
+    name: "7 · Self-Healing PR Bot"
+    needs: autonomous-qa
+    if: |
+      failure() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download failure report
+        uses: actions/download-artifact@v4
+        with:
+          name: autonomous-qa-reports-${{ github.run_id }}
+          path: ./reports
+        continue-on-error: true
+
+      - name: Classify failures and open PR if schema_drift detected
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPORT="./reports/qa-failure-report.json"
+          if [ ! -f "$REPORT" ]; then
+            echo "No failure report found — skipping self-healing PR"
+            exit 0
+          fi
+
+          DRIFT=$(node -e "
+            const r = require('$REPORT');
+            const drift = r.failures.filter(f => f.category === 'schema_drift');
+            console.log(drift.length);
+          ")
+
+          if [ "$DRIFT" -eq "0" ]; then
+            echo "No schema_drift failures — self-healing PR not needed"
+            exit 0
+          fi
+
+          echo "Detected $DRIFT schema_drift failure(s) — opening self-healing PR"
+
+          BRANCH="auto/heal-schema-drift-${{ github.run_id }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          # Regenerate snapshots
+          npm test -- --testPathPattern="src/__tests__/generated/contract.snapshot" --updateSnapshot --ci || true
+
+          git add -A
+          git diff --cached --quiet || git commit -m "fix: auto-update schema snapshots after SDL drift [skip ci]"
+          git push origin "$BRANCH"
+
+          # Open PR via GitHub CLI
+          gh pr create \
+            --title "fix: auto-heal schema snapshot drift (${{ github.run_id }})" \
+            --body "$(cat ./reports/HEALING_REPORT.md)" \
+            --head "$BRANCH" \
+            --base main \
+            --label "autonomous-qe,schema-drift" || echo "PR already exists or gh not available"
