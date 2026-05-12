@@ -118,7 +118,7 @@ jobs:
         run: npm run test:contract -- --ci
 
       - name: Generated schema snapshot test (hard fail)
-        run: npm test -- --testPathPattern="src/__tests__/generated/contract.snapshot" --ci
+        run: npm test -- --testPathPattern="tests/generated/contract.snapshot" --ci
 
       - name: Schema diff against origin/main (hard fail on breaking change)
         run: |
@@ -163,7 +163,7 @@ jobs:
       - run: npm ci
 
       - name: Null-handling edge-case tests (hard fail)
-        run: npm test -- --testPathPattern="src/__tests__/generated/null.handling" --ci
+        run: npm test -- --testPathPattern="tests/generated/null.handling" --ci
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JOB 4 — N+1 Detection Gate (PRs only)
@@ -188,7 +188,7 @@ jobs:
       - run: npm ci
 
       - name: N+1 call-counter proxy tests (hard fail on regression)
-        run: npm test -- --testPathPattern="src/__tests__/generated/nplusone.proxy" --ci
+        run: npm test -- --testPathPattern="tests/generated/nplusone.proxy" --ci
 
       - name: Annotate PR with N+1 status
         if: failure()
@@ -215,7 +215,7 @@ jobs:
       - run: npm ci
 
       - name: Autonomous QA — generated failure report test
-        run: npm test -- --testPathPattern="src/__tests__/generated/failure.report" --ci
+        run: npm test -- --testPathPattern="tests/generated/failure.report" --ci
         env:
           CI: "true"
 
@@ -364,7 +364,7 @@ jobs:
           git checkout -b "$BRANCH"
 
           # Regenerate snapshots
-          npm test -- --testPathPattern="src/__tests__/generated/contract.snapshot" --updateSnapshot --ci || true
+          npm test -- --testPathPattern="tests/generated/contract.snapshot" --updateSnapshot --ci || true
 
           git add -A
           git diff --cached --quiet || git commit -m "fix: auto-update schema snapshots after SDL drift [skip ci]"
